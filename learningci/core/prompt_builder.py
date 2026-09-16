@@ -145,7 +145,9 @@ def build_section_grade_prompt(node: dict, group: dict) -> str:
         "3. 源码路径、函数名、调用链、测试/日志等证据不充分时必须扣分。",
         "4. 如果结论存在明显错误，即使任务全部勾选，也必须扣分并指出具体任务。",
         "5. 不扩展到本节点 out_of_scope，不提供新的学习路线。",
-        "6. 只返回纯 JSON，不要 Markdown fence，不要附加解释。",
+        "6. 每个扣分点单独写入 issues；能定位到叶子任务时必须填写 task_id，dimension 只能是理解准确度/源码证据/边界判断/覆盖完整度之一。",
+        "7. issues.title 写一句短标题，issues.detail 说明具体错在哪里或缺什么证据；severity 只能是 error/warning/info；不要把多个问题揉成一条。",
+        "8. 只返回纯 JSON，不要 Markdown fence，不要附加解释。",
         "",
         "当前小节叶子任务记录：",
     ]
@@ -174,7 +176,16 @@ def build_section_grade_prompt(node: dict, group: dict) -> str:
         '    "覆盖完整度": 0',
         "  },",
         '  "evidence": ["指出哪些叶子回答证明了掌握"],',
-        '  "weaknesses": ["如果有薄弱点，必须具体到任务 ID 或结论"]',
+        '  "issues": [',
+        '    {',
+        '      "task_id": "S0-01-EL-02",',
+        '      "dimension": "源码证据",',
+        '      "title": "调用链证据不完整",',
+        '      "detail": "具体说明错在哪里、缺什么证据或哪条结论不严谨",',
+        '      "severity": "warning"',
+        '    }',
+        '  ],',
+        '  "weaknesses": ["兼容旧版本的简短薄弱点列表；如果 issues 已完整，可保持与 issues 同步"]',
         "}",
     ])
     return "\n".join(lines)

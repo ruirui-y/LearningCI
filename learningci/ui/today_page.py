@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 from learningci.ui.common import StatCard, format_duration, format_hours
 from learningci.ui.dialogs import AssessmentDialog, JsonPasteDialog
 from learningci.core.prompt_builder import build_section_grade_prompt
+from learningci.core.section_feedback import normalize_section_issues
 
 
 class TodayPage(QWidget):
@@ -179,12 +180,63 @@ class TodayPage(QWidget):
         section_box.setObjectName("SectionAssessmentCard")
         section_layout = QVBoxLayout(section_box)
         section_layout.setContentsMargins(10, 10, 10, 10)
-        section_layout.setSpacing(6)
+        section_layout.setSpacing(8)
         self.section_title_label = QLabel("小节验收")
         self.section_title_label.setObjectName("SideCardTitle")
         self.section_status_label = QLabel("完成当前小节叶子任务后，可直接把已有回答与证据交给 AI 打分；不再要求手工写一遍总结。")
         self.section_status_label.setWordWrap(True)
         self.section_status_label.setObjectName("Secondary")
+        section_layout.addWidget(self.section_title_label)
+        section_layout.addWidget(self.section_status_label)
+
+        score_strip = QFrame()
+        score_strip.setObjectName("SectionScoreStrip")
+        score_layout = QGridLayout(score_strip)
+        score_layout.setContentsMargins(6, 6, 6, 6)
+        score_layout.setHorizontalSpacing(6)
+        score_layout.setVerticalSpacing(2)
+        self.section_score_labels = {}
+        score_defs = [
+            ("understanding", "理解准确度", 35),
+            ("evidence", "源码证据", 30),
+            ("boundary", "边界判断", 25),
+            ("completeness", "覆盖完整度", 10),
+        ]
+        for col, (key, title, maximum) in enumerate(score_defs):
+            card = QFrame()
+            card.setObjectName("SectionScoreCard")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(8, 6, 8, 6)
+            card_layout.setSpacing(1)
+            name = QLabel(title)
+            name.setObjectName("SectionScoreName")
+            value = QLabel(f"- / {maximum}")
+            value.setObjectName("SectionScoreValue")
+            card_layout.addWidget(name)
+            card_layout.addWidget(value)
+            score_layout.addWidget(card, 0, col)
+            self.section_score_labels[key] = (value, maximum)
+        section_layout.addWidget(score_strip)
+
+        self.section_issue_header = QLabel("问题明细")
+        self.section_issue_header.setObjectName("SectionIssueHeader")
+        section_layout.addWidget(self.section_issue_header)
+
+        self.section_issue_scroll = QScrollArea()
+        self.section_issue_scroll.setObjectName("SectionIssueScroll")
+        self.section_issue_scroll.setWidgetResizable(True)
+        self.section_issue_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.section_issue_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.section_issue_scroll.setMinimumHeight(220)
+        self.section_issue_scroll.setMaximumHeight(420)
+        issue_body = QWidget()
+        self.section_issue_layout = QVBoxLayout(issue_body)
+        self.section_issue_layout.setContentsMargins(2, 2, 4, 2)
+        self.section_issue_layout.setSpacing(7)
+        self.section_issue_layout.addStretch(1)
+        self.section_issue_scroll.setWidget(issue_body)
+        section_layout.addWidget(self.section_issue_scroll)
+
         section_btns = QHBoxLayout()
         self.copy_section_grade_btn = QPushButton("复制小节验收内容")
         self.copy_section_grade_btn.setObjectName("SecondaryButton")
@@ -193,8 +245,6 @@ class TodayPage(QWidget):
         section_btns.addWidget(self.copy_section_grade_btn)
         section_btns.addWidget(self.paste_section_grade_btn)
         section_btns.addStretch(1)
-        section_layout.addWidget(self.section_title_label)
-        section_layout.addWidget(self.section_status_label)
         section_layout.addLayout(section_btns)
         detail_layout.addWidget(section_box)
 
@@ -494,32 +544,192 @@ class TodayPage(QWidget):
                 return group
         return None
 
+    def _clear_section_issue_cards(self) -> None:
+        while self.section_issue_layout.count() > 1:
+            item = self.section_issue_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _set_section_score(self, key: str, score: int | None) -> None:
+        label, maximum = self.section_score_labels[key]
+        if score is None:
+            label.setText(f"- / {maximum}")
+            label.setProperty("status", "info")
+        else:
+            label.setText(f"{score} / {maximum}")
+            ratio = score / maximum if maximum else 0.0
+            status = "pass" if ratio >= 0.8 else ("warn" if ratio >= 0.65 else "fail")
+            label.setProperty("status", status)
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+    def _add_section_message_card(self, title: str, detail: str, status: str = "info") -> None:
+        card = QFrame()
+        card.setObjectName("SectionIssueCard")
+        card.setProperty("severity", status)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(4)
+        head = QLabel(title)
+        head.setObjectName("IssueTitle")
+        head.setProperty("status", status if status in {"pass", "fail", "warn", "info"} else "info")
+        body = QLabel(detail)
+        body.setObjectName("IssueDetail")
+        body.setWordWrap(True)
+        layout.addWidget(head)
+        layout.addWidget(body)
+        self.section_issue_layout.insertWidget(self.section_issue_layout.count() - 1, card)
+
+    def _render_section_issues(self, group: dict, assessment: dict | None) -> None:
+        self._clear_section_issue_cards()
+        if not assessment:
+            self.section_issue_header.setText("问题明细 · 尚未评分")
+            self._add_section_message_card(
+                "等待小节验收",
+                "完成本小节全部叶子任务后复制现有回答与证据给 AI。评分结果会在这里按 1、2、3、4… 分条显示。",
+                "info",
+            )
+            return
+
+        grade = assessment.get("grade", {}) or {}
+        task_ids = [str(x.get("id", "")) for x in group.get("items", []) if x.get("id")]
+        issues = normalize_section_issues(grade, task_ids)
+        if assessment.get("stale"):
+            self.section_issue_header.setText(f"问题明细 · 上次评分已过期 · {len(issues)} 条历史问题")
+        elif assessment.get("passed"):
+            self.section_issue_header.setText(f"问题明细 · 已通过 · {len(issues)} 条改进项")
+        else:
+            self.section_issue_header.setText(f"问题明细 · 共 {len(issues)} 条")
+
+        if not issues:
+            message = "当前 AI 评分没有返回具体扣分项。"
+            if assessment.get("passed"):
+                message = "本小节已通过，当前没有需要修正的问题。"
+            self._add_section_message_card("没有具体问题", message, "pass" if assessment.get("passed") else "warn")
+            return
+
+        for index, issue in enumerate(issues, start=1):
+            card = QFrame()
+            card.setObjectName("SectionIssueCard")
+            severity = issue.get("severity", "warning")
+            card.setProperty("severity", severity)
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(10, 9, 10, 9)
+            layout.setSpacing(5)
+
+            header = QHBoxLayout()
+            number = QLabel(str(index))
+            number.setObjectName("IssueIndex")
+            header.addWidget(number, 0, Qt.AlignmentFlag.AlignTop)
+
+            task_id = str(issue.get("task_id", "") or "")
+            if task_id:
+                badge = QLabel(task_id)
+                badge.setObjectName("IssueTaskBadge")
+                header.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+
+            dimension = str(issue.get("dimension", "") or "")
+            if dimension:
+                dimension_label = QLabel(dimension)
+                dimension_label.setObjectName("IssueDimensionBadge")
+                header.addWidget(dimension_label, 0, Qt.AlignmentFlag.AlignTop)
+
+            title = QLabel(str(issue.get("title", "") or "需要修正"))
+            title.setObjectName("IssueTitle")
+            title.setWordWrap(True)
+            header.addWidget(title, 1)
+            layout.addLayout(header)
+
+            detail = QLabel(str(issue.get("detail", "") or ""))
+            detail.setObjectName("IssueDetail")
+            detail.setWordWrap(True)
+            detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(detail)
+
+            if task_id:
+                jump = QPushButton(f"定位到任务 {task_id}")
+                jump.setObjectName("IssueJumpButton")
+                jump.clicked.connect(lambda _checked=False, tid=task_id: self._jump_to_task(tid))
+                layout.addWidget(jump, 0, Qt.AlignmentFlag.AlignLeft)
+
+            self.section_issue_layout.insertWidget(self.section_issue_layout.count() - 1, card)
+
+    def _find_task_item(self, task_id: str) -> QTreeWidgetItem | None:
+        root_count = self.task_tree.topLevelItemCount()
+        for i in range(root_count):
+            parent = self.task_tree.topLevelItem(i)
+            for j in range(parent.childCount()):
+                child = parent.child(j)
+                if str(child.data(0, self.TASK_ROLE) or "") == task_id:
+                    return child
+        return None
+
+    def _jump_to_task(self, task_id: str) -> None:
+        if not self.node:
+            return
+        item = self._find_task_item(task_id)
+        if item is None:
+            QMessageBox.information(self, "无法定位任务", f"当前任务树中没有找到 {task_id}。")
+            return
+        if self.selected_task_code and self.selected_task_code != task_id:
+            self.save_pending_edits()
+        parent = item.parent()
+        if parent is not None:
+            parent.setExpanded(True)
+        self.task_tree.setCurrentItem(item)
+        self.task_tree.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
+        self.selected_task_code = task_id
+        self._load_task_detail(task_id)
+
     def _refresh_section_assessment(self) -> None:
         group = self._current_section_group()
         if not group:
             self.section_title_label.setText("小节验收")
             self.section_status_label.setText("请选择一个叶子任务。")
+            for key in self.section_score_labels:
+                self._set_section_score(key, None)
+            self._render_section_issues({}, None)
             self.copy_section_grade_btn.setEnabled(False)
             self.paste_section_grade_btn.setEnabled(False)
             return
+
         self.section_title_label.setText(f"小节验收 · {group.get('title', '')}")
         required = [x for x in group.get("items", []) if x.get("required", True)]
         done = sum(1 for x in required if x.get("completed"))
         total = len(required)
         assessment = group.get("assessment")
+
+        if assessment:
+            self._set_section_score("understanding", int(assessment.get("understanding", 0)))
+            self._set_section_score("evidence", int(assessment.get("evidence", 0)))
+            self._set_section_score("boundary", int(assessment.get("boundary", 0)))
+            self._set_section_score("completeness", int(assessment.get("completeness", 0)))
+        else:
+            for key in self.section_score_labels:
+                self._set_section_score(key, None)
+
         if assessment and assessment.get("stale"):
-            status = f"上次 {assessment.get('total', '-')} 分，但证据已修改，评分已失效，需要重新验收。"
+            status = f"上次 {assessment.get('total', '-')} / 100，但证据已修改，评分已失效。下面保留历史扣分点供修正参考。"
+            self.section_status_label.setProperty("status", "warn")
         elif assessment and assessment.get("passed"):
             status = f"已通过 · {assessment.get('total', '-')} / 100 · 第 {assessment.get('attempt_no', '?')} 次验收"
+            self.section_status_label.setProperty("status", "pass")
         elif assessment:
-            weaknesses = assessment.get("grade", {}).get("weaknesses", [])
-            extra = "；".join(str(x) for x in weaknesses[:2]) if weaknesses else "请根据薄弱点补充当前叶子任务证据。"
-            status = f"未通过 · {assessment.get('total', '-')} / 100 · {extra}"
+            issues = normalize_section_issues(assessment.get("grade", {}) or {}, [str(x.get("id", "")) for x in group.get("items", [])])
+            status = f"未通过 · {assessment.get('total', '-')} / 100 · 共 {len(issues)} 条问题。按下面编号逐条修正即可，不需要再写总结。"
+            self.section_status_label.setProperty("status", "fail")
         elif done == total and total:
             status = f"叶子任务 {done}/{total} 已完成。可直接把现有回答与证据交给 AI 评分，不需要再写总结。"
+            self.section_status_label.setProperty("status", "info")
         else:
             status = f"叶子任务 {done}/{total}。全部完成后才能进行小节验收。"
+            self.section_status_label.setProperty("status", "info")
         self.section_status_label.setText(status)
+        self.section_status_label.style().unpolish(self.section_status_label)
+        self.section_status_label.style().polish(self.section_status_label)
+
+        self._render_section_issues(group, assessment)
         ready = bool(total == 0 or done == total)
         self.copy_section_grade_btn.setEnabled(ready)
         self.paste_section_grade_btn.setEnabled(ready)

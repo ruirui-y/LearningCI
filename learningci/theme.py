@@ -233,6 +233,104 @@ def build_qss() -> str:
         border: 1px solid #5C4722;
         border-radius: 9px;
     }}
+    QFrame#SectionAssessmentCard {{
+        background-color: #141820;
+        border: 1px solid {BORDER};
+        border-radius: 9px;
+    }}
+    QFrame#SectionScoreStrip {{
+        background: transparent;
+        border: none;
+    }}
+    QFrame#SectionScoreCard {{
+        background-color: {CARD_BG};
+        border: 1px solid {BORDER};
+        border-radius: 7px;
+    }}
+    QLabel#SectionScoreName {{
+        color: {TEXT_MUTED};
+        font-size: 10px;
+    }}
+    QLabel#SectionScoreValue {{
+        color: {TEXT_PRIMARY};
+        font-size: 14px;
+        font-weight: 700;
+    }}
+    QLabel#SectionIssueHeader {{
+        color: {TEXT_SECONDARY};
+        font-size: 12px;
+        font-weight: 700;
+        padding-top: 2px;
+    }}
+    QScrollArea#SectionIssueScroll {{
+        background: transparent;
+        border: 1px solid {BORDER};
+        border-radius: 7px;
+    }}
+    QScrollArea#SectionIssueScroll > QWidget > QWidget {{
+        background-color: #12161D;
+    }}
+    QFrame#SectionIssueCard {{
+        background-color: {CARD_BG};
+        border: 1px solid {BORDER};
+        border-left: 3px solid {WARNING};
+        border-radius: 7px;
+    }}
+    QFrame#SectionIssueCard[severity="error"] {{ border-left-color: {DANGER}; }}
+    QFrame#SectionIssueCard[severity="warning"] {{ border-left-color: {WARNING}; }}
+    QFrame#SectionIssueCard[severity="info"] {{ border-left-color: {PRIMARY}; }}
+    QFrame#SectionIssueCard[severity="pass"] {{ border-left-color: {SUCCESS}; }}
+    QLabel#IssueIndex {{
+        color: {TEXT_PRIMARY};
+        background-color: #273142;
+        border: 1px solid #3A4B63;
+        border-radius: 10px;
+        min-width: 20px;
+        max-width: 20px;
+        min-height: 20px;
+        max-height: 20px;
+        font-weight: 700;
+        qproperty-alignment: AlignCenter;
+    }}
+    QLabel#IssueTaskBadge {{
+        color: #C8DAF5;
+        background-color: #1D2B3D;
+        border: 1px solid #314864;
+        border-radius: 4px;
+        padding: 2px 5px;
+        font-size: 10px;
+        font-weight: 650;
+    }}
+    QLabel#IssueDimensionBadge {{
+        color: #FAD9A1;
+        background-color: #30271A;
+        border: 1px solid #5A4727;
+        border-radius: 4px;
+        padding: 2px 5px;
+        font-size: 10px;
+    }}
+    QLabel#IssueTitle {{
+        color: {TEXT_PRIMARY};
+        font-weight: 700;
+    }}
+    QLabel#IssueDetail {{
+        color: {TEXT_SECONDARY};
+        line-height: 1.45;
+    }}
+    QPushButton#IssueJumpButton {{
+        background-color: #1A2A3D;
+        border-color: #2F4A68;
+        color: #D8E8FB;
+        padding: 5px 9px;
+        min-height: 14px;
+    }}
+    QPushButton#IssueJumpButton:hover {{
+        background-color: #223851;
+        border-color: #42668C;
+    }}
+    QPushButton#IssueJumpButton:pressed {{
+        background-color: #142234;
+    }}
     QLabel#TaskCriteria {{
         color: {TEXT_SECONDARY};
         background-color: {CARD_BG_ALT};

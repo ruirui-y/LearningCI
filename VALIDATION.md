@@ -31,3 +31,7 @@ OK
 - SQLite snapshot backup / restore roundtrip
 
 当前生成环境未安装 PyQt6，因此没有执行真实 GUI 启动 smoke test。PyQt 源码已通过 Python compileall；需要在用户本地 PyQt6 环境做视觉验收。
+
+## v0.3.4
+
+小节反馈解析新增 4 个测试；当前共 26 个自动测试全部通过。
