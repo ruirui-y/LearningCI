@@ -87,3 +87,23 @@ MVP 暂不做：
 - 自动计算性能达到参考实现的百分比
 
 目标不是做一个“学习打卡软件”，而是逐步变成真正的 **Human CI / Learning CI**。
+
+
+## 当前实现状态（v0.1）
+
+已进入 Phase 1，可运行代码已经落地：
+
+- [x] SQLite Schema / Repository Service
+- [x] Frozen Plan JSON + SHA-256 防静默修改
+- [x] Today 唯一节点
+- [x] 开始学习 / 结束学习
+- [x] 日 / 周 / 月专注时间
+- [x] 每日任务 Checklist / 完成度
+- [x] Manual AI Test / Grade Bridge
+- [x] 本地 PASS/FAIL Gate
+- [x] FAIL 不前进
+- [x] Review Queue / Stable Score
+- [x] 日 / 周 / 月 History
+- [x] Parking Lot
+- [ ] DeepSeek API Provider（v0.2 再做）
+- [ ] 自动读取 Git/Test/Benchmark Evidence（后续）

@@ -114,3 +114,20 @@ Training → Verification → Score
 - 禁止普通学习日修改主路线
 
 详见 `ROADMAP.md` 与 `docs/08-checkin-app-spec.md`。
+
+
+## Desktop MVP v0.1.1
+
+Python + PyQt6 + SQLite 桌面端已经开始实现。第一版故意不内置 AI API，而采用聊天式 AI 手工桥接：应用生成严格 Prompt，用户粘贴到任意 AI，再把 JSON 结果粘回 LearningCI。本地程序负责最终 PASS/FAIL，不允许 AI 修改冻结路线。
+
+当前已实现：开始/结束学习、日/周/月专注时间、今日任务完成度、五维评分、失败不前进、延迟复测、Stable Score、日/周/月统计、Parking Lot 与只读 Frozen Plan。
+
+v0.1.1 额外修正：
+
+- NebulaRPC Master Plan 已作为冻结计划唯一来源重新编译为 68 个执行节点；
+- `docs/history/*` 明确属于目标项目 NebulaRPC，而不是 LearningCI/docs；
+- 粘贴试卷后，每道题自动显示独立回答框；
+- 按钮补齐 hover / pressed / disabled / focus 状态；
+- Stage 13~14 OPTIONAL 分支不阻塞主线。
+
+运行方式见 `app/README.md`，路径说明见 `docs/10-nebularpc-plan-paths.md`。
