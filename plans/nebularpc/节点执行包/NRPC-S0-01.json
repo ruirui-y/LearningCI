@@ -1,0 +1,838 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S0-01",
+  "node_title": "MyMuduo 历史能力审计",
+  "source_plan_version": "0.3-learningci-full",
+  "source_section": "§4.1 / §7 / §30",
+  "compiler": {
+    "type": "LearningCI Node Bundle Compiler",
+    "status": "REVIEWED",
+    "note": "S0-01 已人工细化；其余节点由冻结节点字段逐节点编译，可后续使用 DeepSeek Node Compiler 在不改变路线的前提下替换为更细 bundle。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "eventloop",
+      "title": "1. EventLoop / Reactor 审计",
+      "description": "只做源码审计与能力边界确认，不重新实现 Reactor。",
+      "items": [
+        {
+          "id": "S0-01-EL-01",
+          "title": "定位 EventLoop::loop() 主循环",
+          "detail": "在 MyMuduo 中找到 EventLoop 主循环实现，确认它如何进入 poll/epoll 等待。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录源码文件路径",
+            "记录 EventLoop::loop() 函数位置",
+            "用一句话描述循环职责"
+          ]
+        },
+        {
+          "id": "S0-01-EL-02",
+          "title": "定位 Poller/EPollPoller 调用链",
+          "detail": "从 EventLoop::loop() 向下追踪到 Poller/EPollPoller 的 poll 调用。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "画出 EventLoop → Poller/EPollPoller 调用链",
+            "绑定至少一个真实函数名"
+          ]
+        },
+        {
+          "id": "S0-01-EL-03",
+          "title": "确认 active Channel 分发路径",
+          "detail": "追踪 epoll 返回后 active channels 如何回到 Channel::handleEvent()/等价入口。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写出事件返回后的对象级分发路径",
+            "绑定源码位置"
+          ]
+        },
+        {
+          "id": "S0-01-EL-04",
+          "title": "确认 runInLoop / queueInLoop 语义",
+          "detail": "找到跨线程或同线程任务投递相关实现，并区分立即执行与排队执行。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录 runInLoop/queueInLoop 或等价函数",
+            "说明它们与线程归属的关系"
+          ]
+        },
+        {
+          "id": "S0-01-EL-05",
+          "title": "确认 eventfd 唤醒路径",
+          "detail": "找到 eventfd 创建、写入、读取和唤醒 EventLoop 的完整路径。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 eventfd 相关源码位置",
+            "写出 foreign thread → wakeup → loop 的链路"
+          ]
+        },
+        {
+          "id": "S0-01-EL-06",
+          "title": "写清 One Loop Per Thread 所有权",
+          "detail": "基于源码而不是 README，确认 EventLoop 与线程之间的实际约束。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "说明一个 EventLoop 是否固定线程",
+            "指出线程检查/断言/调用边界的源码证据"
+          ]
+        },
+        {
+          "id": "S0-01-EL-07",
+          "title": "形成 EventLoop 审计结论",
+          "detail": "把本组结论写入 NebulaRPC/docs/history/MYMUDUO_AUDIT.md。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "文档出现“已解决能力 / 技术债 / 可复用边界”三类结论",
+            "每条结论至少有一个源码路径或函数名"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tcpconnection",
+      "title": "2. TcpConnection 非阻塞收发与生命周期审计",
+      "description": "重点确认 partial write、output buffer、EPOLLOUT 和生命周期，而不是重写。",
+      "items": [
+        {
+          "id": "S0-01-TC-01",
+          "title": "定位 TcpConnection::handleRead()",
+          "detail": "找到可读事件进入 TcpConnection 的实际处理函数。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录 handleRead/等价函数位置",
+            "说明数据最终进入哪个 Buffer/回调"
+          ]
+        },
+        {
+          "id": "S0-01-TC-02",
+          "title": "定位发送入口 send()",
+          "detail": "找到应用层进入 TcpConnection 发送路径的入口，并记录线程切换点。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 send/等价入口",
+            "说明调用线程与 owner loop 的关系"
+          ]
+        },
+        {
+          "id": "S0-01-TC-03",
+          "title": "定位 sendInLoop()/等价写函数",
+          "detail": "追踪真正执行 socket write 的函数。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录函数位置",
+            "指出实际 write/send syscall 所在位置"
+          ]
+        },
+        {
+          "id": "S0-01-TC-04",
+          "title": "确认 partial write 后剩余 bytes 所有权",
+          "detail": "追踪第一次 write 未写完时剩余数据如何保存。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "指出剩余 bytes 保存对象/Buffer",
+            "指出何时转入 output buffer",
+            "绑定源码位置"
+          ]
+        },
+        {
+          "id": "S0-01-TC-05",
+          "title": "确认何时 enable EPOLLOUT",
+          "detail": "找到写不完后打开可写事件监听的真实代码。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录 enableWriting/等价调用",
+            "说明触发条件"
+          ]
+        },
+        {
+          "id": "S0-01-TC-06",
+          "title": "定位 handleWrite()/等价 flush 路径",
+          "detail": "追踪 EPOLLOUT 到达后如何继续发送 output buffer。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写出 Channel → TcpConnection writable callback 链",
+            "绑定函数位置"
+          ]
+        },
+        {
+          "id": "S0-01-TC-07",
+          "title": "确认何时 disable EPOLLOUT",
+          "detail": "确认 output buffer 清空后是否关闭可写事件监听。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "指出关闭 EPOLLOUT 的条件",
+            "说明若不关闭可能发生什么"
+          ]
+        },
+        {
+          "id": "S0-01-TC-08",
+          "title": "定位 handleClose()/连接关闭入口",
+          "detail": "找到 FIN/RST/错误等最终进入关闭流程的主要入口。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定关闭函数",
+            "记录 channel/poller/connection 的清理顺序"
+          ]
+        },
+        {
+          "id": "S0-01-TC-09",
+          "title": "审计 shared_ptr / weak_ptr 生命周期",
+          "detail": "找出 TcpConnection 在回调和容器中的所有权策略，确认是否避免回调期间销毁。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少找到一处 shared_ptr/weak_ptr/tie/guard 相关证据",
+            "说明对象何时允许销毁"
+          ]
+        },
+        {
+          "id": "S0-01-TC-10",
+          "title": "列出 TcpConnection 历史技术债",
+          "detail": "只基于真实源码列出仍不能直接带入 NebulaRPC 的边界，不做优化。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少记录 1 个“需要最小恢复或重新验证”的点",
+            "不得把后续协程/RPC 问题写进来"
+          ]
+        },
+        {
+          "id": "S0-01-TC-11",
+          "title": "形成 TcpConnection 审计结论",
+          "detail": "把读写路径、EPOLLOUT、不变量和生命周期结论写入审计文档。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "文档能独立回答 1MB payload 第一次只写一部分时后续如何推进",
+            "绑定对应源码位置"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "connector",
+      "title": "3. Connector 审计",
+      "description": "确认连接建立、完成、失败、重试与 EventLoop 的关系。",
+      "items": [
+        {
+          "id": "S0-01-CO-01",
+          "title": "定位 Connector::connect()",
+          "detail": "找到非阻塞 connect 的发起路径。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 connect/等价函数",
+            "记录 socket 状态变化"
+          ]
+        },
+        {
+          "id": "S0-01-CO-02",
+          "title": "定位 connecting()/Channel 注册",
+          "detail": "找到 EINPROGRESS 后如何注册可写事件等待连接完成。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写出 fd → Channel → EPOLLOUT 连接完成路径"
+          ]
+        },
+        {
+          "id": "S0-01-CO-03",
+          "title": "确认连接成功检测",
+          "detail": "找到 SO_ERROR/getSocketError 或等价判断。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定成功/失败判断函数",
+            "说明成功后 fd 如何交给上层"
+          ]
+        },
+        {
+          "id": "S0-01-CO-04",
+          "title": "确认连接失败路径",
+          "detail": "追踪连接失败后的 channel 清理与状态回退。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定失败路径",
+            "记录资源是否被释放"
+          ]
+        },
+        {
+          "id": "S0-01-CO-05",
+          "title": "确认 retry 行为",
+          "detail": "如果实现了重试，记录触发条件和调度方式；如果没有，也要用源码证明。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录 retry/定时相关入口或明确“未实现”证据"
+          ]
+        },
+        {
+          "id": "S0-01-CO-06",
+          "title": "形成 Connector 审计结论",
+          "detail": "写清 Connector 哪些事件驱动能力可作为 NebulaRPC 的历史基础。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写入审计文档",
+            "至少绑定两个函数位置"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tcpclient",
+      "title": "4. TcpClient 审计",
+      "description": "确认 TcpClient 如何把 Connector 与 TcpConnection 串起来。",
+      "items": [
+        {
+          "id": "S0-01-CL-01",
+          "title": "定位 TcpClient 创建/持有 Connector",
+          "detail": "找到 TcpClient 与 Connector 的成员关系和初始化位置。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录文件/成员/构造位置"
+          ]
+        },
+        {
+          "id": "S0-01-CL-02",
+          "title": "追踪 Connector → TcpClient 的 fd 交接",
+          "detail": "找到连接成功回调如何把 socket fd 交给 TcpClient。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写出回调链",
+            "绑定函数名"
+          ]
+        },
+        {
+          "id": "S0-01-CL-03",
+          "title": "定位 newConnection()/等价入口",
+          "detail": "确认 TcpClient 如何创建 TcpConnection 并注册回调。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录创建 TcpConnection 的函数",
+            "记录 EventLoop 归属"
+          ]
+        },
+        {
+          "id": "S0-01-CL-04",
+          "title": "定位 removeConnection()/关闭回调",
+          "detail": "确认连接关闭后 TcpClient 如何移除或释放 connection。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 remove/close 回调",
+            "说明所有权释放点"
+          ]
+        },
+        {
+          "id": "S0-01-CL-05",
+          "title": "形成 TcpClient 审计结论",
+          "detail": "写清它为什么已经比旧 ReceiverThread 客户端更接近事件驱动网络基础，但仍不等于 Async RPC。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "只讨论当前节点网络能力边界",
+            "写入审计文档并绑定源码"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "buffer",
+      "title": "5. Buffer 审计",
+      "description": "确认 Buffer 如何服务 TcpConnection 的增量读写。",
+      "items": [
+        {
+          "id": "S0-01-BF-01",
+          "title": "定位 readableBytes()/可读区语义",
+          "detail": "确认 Buffer 的读索引与可读字节计算。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定函数位置",
+            "用图或文字写出 reader/writer index 关系"
+          ]
+        },
+        {
+          "id": "S0-01-BF-02",
+          "title": "定位 writableBytes()/可写区语义",
+          "detail": "确认可写空间与扩容/整理策略。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定函数位置",
+            "说明空间不足时怎么处理"
+          ]
+        },
+        {
+          "id": "S0-01-BF-03",
+          "title": "定位 append() 写入路径",
+          "detail": "确认应用数据如何追加到 Buffer。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 append/ensureWritable 等相关函数"
+          ]
+        },
+        {
+          "id": "S0-01-BF-04",
+          "title": "定位 retrieve()/消费路径",
+          "detail": "确认数据消费后索引如何推进或复位。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 retrieve/等价函数"
+          ]
+        },
+        {
+          "id": "S0-01-BF-05",
+          "title": "定位 readFd()/readv()",
+          "detail": "确认 socket 数据如何进入 Buffer，以及额外栈缓冲/自适应读的实现。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "绑定 readv/readFd 位置",
+            "说明大于当前 writable 空间的数据如何处理"
+          ]
+        },
+        {
+          "id": "S0-01-BF-06",
+          "title": "形成 Buffer 审计结论",
+          "detail": "说明 Buffer 已经解决的基础问题与 NebulaRPC 仍需重新验证的边界。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写入审计文档",
+            "至少绑定两个函数位置"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "audit",
+      "title": "6. 审计文档收束与证据检查",
+      "description": "把前面的真实源码观察收束为可复用的历史能力边界。",
+      "items": [
+        {
+          "id": "S0-01-AU-01",
+          "title": "完成“已经解决”章节",
+          "detail": "把 Reactor/TcpClient/Buffer/生命周期已经解决的能力逐条写清。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "每条结论都不是单纯类名",
+            "每条关键结论至少有源码路径/函数"
+          ]
+        },
+        {
+          "id": "S0-01-AU-02",
+          "title": "完成“历史技术债”章节",
+          "detail": "记录旧实现仍需重新验证或不能原样搬入 NebulaRPC 的边界。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "技术债必须来自实际源码观察",
+            "不提前讨论协程"
+          ]
+        },
+        {
+          "id": "S0-01-AU-03",
+          "title": "完成“可复用边界”章节",
+          "detail": "每个能力标记为：可直接复用思想 / 需要最小恢复 / 不能直接复用。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "三类结论均给出依据"
+          ]
+        },
+        {
+          "id": "S0-01-AU-04",
+          "title": "补齐 git grep / IDE 调用链证据",
+          "detail": "把实际使用过的检索命令或 IDE 调用链记录写入文档末尾。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少提供一种真实可复核证据",
+            "不能编造输出"
+          ]
+        },
+        {
+          "id": "S0-01-AU-05",
+          "title": "核对项目锚点路径",
+          "detail": "确认产物位于 NebulaRPC/docs/history/MYMUDUO_AUDIT.md，而不是 LearningCI/docs。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 5,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "目标文件路径正确",
+            "文件可打开"
+          ]
+        },
+        {
+          "id": "S0-01-AU-06",
+          "title": "对照固定试卷做考前自检",
+          "detail": "只查看题目，不查答案，确认每题要求的证据都已经准备。",
+          "purpose": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "五道题都有对应学习/工程证据",
+            "不得提前让 AI 给答案"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 41,
+  "verification_paper": {
+    "paper_id": "NRPC-S0-01-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "基于你实际阅读到的 MyMuduo 源码，说明它在以下四个方面已经形成了什么能力边界：① Reactor / One Loop Per Thread；② TcpClient / Connector；③ TcpConnection 的非阻塞发送与接收；④ TcpConnection 生命周期与所有权。要求对每一项分别说明“已经解决到什么程度”和“这个结论为什么足以支持 NebulaRPC 不从零重做该能力”。不能只列类名或概念，必须结合真实对象之间的职责关系进行解释。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "选择 MyMuduo 中一条真实的 TcpClient → TcpConnection 通信路径。假设已经建立连接，此时应用层连续提交多个发送请求，其中至少一个请求不能在第一次 socket 写操作中全部写完。禁止运行程序，先根据源码预测：后续数据会经过哪些对象和回调继续推进；哪些状态或事件会发生变化；后续什么条件出现时发送流程继续；连接在这段时间发生关闭时，已有发送状态会如何受到影响。提交预测时必须标出你依据的源码文件和函数名，但本题不要求修改代码。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "完成 NebulaRPC/docs/history/MYMUDUO_AUDIT.md 中的 MyMuduo 历史能力审计。本次至少审计 EventLoop、TcpConnection、Connector、TcpClient、Buffer 五部分。每部分必须包含：① 已解决能力；② 真实调用关系或对象关系；③ 至少一个源码文件路径和函数名；④ 已发现的历史技术债或当前不能直接假定成立的边界；⑤ 对 NebulaRPC 的结论只能是“可直接复用思想/需要最小恢复/不能直接复用”三类之一，并给出依据。作为可验证证据，文档末尾必须附上本次实际使用的 git grep 命令及其输出摘要，或者 IDE 调用链记录；不得编造不存在的路径或函数。最终提交 MYMUDUO_AUDIT.md 的内容以及证据。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从 MyMuduo 的真实源码中任选一个与当前节点直接相关的历史实现问题进行诊断，范围只能是：partial write / output buffer / EPOLLOUT、TcpClient/Connector 事件驱动连接流程、TcpConnection 生命周期与所有权。诊断必须按照“观察到的实现 → 可能失效的具体场景 → 追踪到的源码路径 → 根因 → 当前实现是否已经解决 → NebulaRPC 是否仍需重新处理”六步完成。必须提供可验证依据，至少包含源码文件与函数名，并补充 git grep/IDE 调用链记录中的一种；如果你认为所选问题在 MyMuduo 中已经正确解决，也必须用源码证据证明，而不能只写结论。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "假设现在开始 NebulaRPC 的最小网络 Runtime 恢复，但禁止直接复制整个 MyMuduo。仅根据本次源码审计结果，把以下能力逐项归类为“无需重新证明”“需要通过最小测试恢复”“必须重新设计后才能使用”：EventLoop/Channel 事件分发、One Loop Per Thread 所有权、TcpClient/Connector、Buffer、partial write/output buffer/EPOLLOUT、TcpConnection 生命周期。每项必须说明判断依据，并明确指出哪些旧实现即使能运行，也不能因此直接视为 NebulaRPC 已掌握的新能力。不得引入协程、RPC 协议或后续阶段技术。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

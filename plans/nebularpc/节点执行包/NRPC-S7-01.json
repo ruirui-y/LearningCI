@@ -1,0 +1,378 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S7-01",
+  "node_title": "Output Watermark 与 Slow Consumer 边界",
+  "source_plan_version": "0.3-learningci-full",
+  "source_section": "§14.1 / §14.2 / §14.4",
+  "compiler": {
+    "type": "LearningCI Node Bundle Compiler",
+    "status": "GENERATED",
+    "note": "S0-01 已人工细化；其余节点由冻结节点字段逐节点编译，可后续使用 DeepSeek Node Compiler 在不改变路线的前提下替换为更细 bundle。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "g1",
+      "title": "1. 实现 output watermarks",
+      "description": "由冻结计划中的最低任务展开。",
+      "items": [
+        {
+          "id": "NRPC-S7-01-G1-01",
+          "title": "定位任务边界：实现 output watermarks",
+          "detail": "先定位完成“实现 output watermarks”真正涉及的文件、函数、测试、脚本或文档位置；不开始相邻节点工作。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "列出实际涉及的文件/函数/命令",
+            "确认没有进入 Out of Scope"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-G1-02",
+          "title": "执行核心任务：实现 output watermarks",
+          "detail": "实现 output watermarks",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成冻结任务：实现 output watermarks",
+            "留下可复核的RSS/output_buffer 指标、slow consumer test"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-G1-03",
+          "title": "记录验证结果：实现 output watermarks",
+          "detail": "把执行结果、失败现象、最终结论和证据位置写入项目锚点规定的产物；如果本任务是实验，必须同时记录参数和结果。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "结论可以由第三方根据证据复核",
+            "记录至少一个实际证据位置"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g2",
+      "title": "2. High 时触发 backpressure/reject，Hard 时明确 fail/close 策略",
+      "description": "由冻结计划中的最低任务展开。",
+      "items": [
+        {
+          "id": "NRPC-S7-01-G2-01",
+          "title": "定位任务边界：High 时触发 backpressure/reject",
+          "detail": "先定位完成“High 时触发 backpressure/reject，Hard 时明确 fail/close 策略”真正涉及的文件、函数、测试、脚本或文档位置；不开始相邻节点工作。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "列出实际涉及的文件/函数/命令",
+            "确认没有进入 Out of Scope"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-G2-02",
+          "title": "执行核心任务：High 时触发 backpressure/reject",
+          "detail": "High 时触发 backpressure/reject，Hard 时明确 fail/close 策略",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成冻结任务：High 时触发 backpressure/reject，Hard 时明确 fail/close 策略",
+            "留下可复核的RSS/output_buffer 指标、slow consumer test"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-G2-03",
+          "title": "记录验证结果：High 时触发 backpressure/reject",
+          "detail": "把执行结果、失败现象、最终结论和证据位置写入项目锚点规定的产物；如果本任务是实验，必须同时记录参数和结果。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "结论可以由第三方根据证据复核",
+            "记录至少一个实际证据位置"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g3",
+      "title": "3. 构造 peer 不读数据的 slow consumer",
+      "description": "由冻结计划中的最低任务展开。",
+      "items": [
+        {
+          "id": "NRPC-S7-01-G3-01",
+          "title": "定位任务边界：构造 peer 不读数据的 slow consumer",
+          "detail": "先定位完成“构造 peer 不读数据的 slow consumer”真正涉及的文件、函数、测试、脚本或文档位置；不开始相邻节点工作。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "列出实际涉及的文件/函数/命令",
+            "确认没有进入 Out of Scope"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-G3-02",
+          "title": "执行核心任务：构造 peer 不读数据的 slow consumer",
+          "detail": "构造 peer 不读数据的 slow consumer",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成冻结任务：构造 peer 不读数据的 slow consumer",
+            "留下可复核的RSS/output_buffer 指标、slow consumer test"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-G3-03",
+          "title": "记录验证结果：构造 peer 不读数据的 slow consumer",
+          "detail": "把执行结果、失败现象、最终结论和证据位置写入项目锚点规定的产物；如果本任务是实验，必须同时记录参数和结果。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "结论可以由第三方根据证据复核",
+            "记录至少一个实际证据位置"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "must",
+      "title": "能力核对",
+      "description": "把“接触过”压缩成可闭卷解释的能力。",
+      "items": [
+        {
+          "id": "NRPC-S7-01-M-01",
+          "title": "闭卷确认：output buffer bound",
+          "detail": "不看答案，用自己的话写出“output buffer bound”的作用、边界、关键因果关系，并指出它在当前项目中的真实落点。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能够解释 output buffer bound 为什么存在",
+            "能够指出真实项目落点",
+            "能够说明至少一个边界或失败场景"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-M-02",
+          "title": "闭卷确认：watermark",
+          "detail": "不看答案，用自己的话写出“watermark”的作用、边界、关键因果关系，并指出它在当前项目中的真实落点。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能够解释 watermark 为什么存在",
+            "能够指出真实项目落点",
+            "能够说明至少一个边界或失败场景"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-M-03",
+          "title": "闭卷确认：slow consumer",
+          "detail": "不看答案，用自己的话写出“slow consumer”的作用、边界、关键因果关系，并指出它在当前项目中的真实落点。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能够解释 slow consumer 为什么存在",
+            "能够指出真实项目落点",
+            "能够说明至少一个边界或失败场景"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-M-04",
+          "title": "闭卷确认：memory boundedness",
+          "detail": "不看答案，用自己的话写出“memory boundedness”的作用、边界、关键因果关系，并指出它在当前项目中的真实落点。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能够解释 memory boundedness 为什么存在",
+            "能够指出真实项目落点",
+            "能够说明至少一个边界或失败场景"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "title": "验收准备",
+      "description": "只检查当前节点证据是否齐全，不扩路线。",
+      "items": [
+        {
+          "id": "NRPC-S7-01-GATE-01",
+          "title": "核对工程产物完整性",
+          "detail": "确认 nebula/net/、tests/ 已存在且能被复核。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "项目锚点产物存在",
+            "关键结论能追溯到证据"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-GATE-02",
+          "title": "核对 Out of Scope",
+          "detail": "确认本节点没有为了完成任务而进入：自适应并发控制。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 5,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "没有提交相邻节点成果冒充当前节点完成度"
+          ]
+        },
+        {
+          "id": "NRPC-S7-01-GATE-03",
+          "title": "对照固定试卷自检",
+          "detail": "提前查看固定 Verification 题目，仅检查证据是否准备，不向 AI 索要答案。",
+          "purpose": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+          "estimated_minutes": 8,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "五个评分维度都有可用证据",
+            "implementation/diagnosis 的工程证据可复核"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 16,
+  "verification_paper": {
+    "paper_id": "NRPC-S7-01-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "不查看总计划，用自己的话解释“Output Watermark 与 Slow Consumer 边界”的核心机制、它解决的问题以及边界。必须覆盖本节点 Must Learn：output buffer bound；watermark；slow consumer；memory boundedness。不能只背定义；需要结合 NebulaRPC 当前实现或设计说明因果关系。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "围绕“Output Watermark 与 Slow Consumer 边界”构造一个当前节点范围内的陌生变化场景：改变一个关键输入、时序、并发条件或故障条件。在实际运行前，先预测系统行为、关键状态变化和最可能失败的位置，并写出预测依据。不得进入本节点明确不考的范围：自适应并发控制。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交本节点规定的真实工程产物并证明它达到冻结计划的最低验收标准。项目锚点：nebula/net/、tests/。必须附可验证证据（至少一种：RSS/output_buffer 指标、slow consumer test），同时给出复现命令/步骤和实际结果；只描述“已经完成”不得分。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实实现、测试或实验中选择一个失败/异常/边界问题进行诊断。必须按“观察 → 假设 → 证据采集 → 根因 → 修复或结论 → 再验证”完成，并附真实可验证证据（RSS/output_buffer 指标、slow consumer test）。问题必须严格属于“Output Watermark 与 Slow Consumer 边界”范围。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "给出一个没有在训练任务中原样出现、但仍属于当前能力边界的新场景，说明如何把“能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。”迁移过去。必须说明哪些原则保持不变、哪些参数或实现需要调整、有什么取舍；禁止借此提前进入：自适应并发控制。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

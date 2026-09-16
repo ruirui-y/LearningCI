@@ -11,7 +11,7 @@ class HistoryPage(QWidget):
         self.service = service
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 24)
-        title = QLabel("History & Statistics")
+        title = QLabel("学习统计")
         title.setObjectName("PageTitle")
         sub = QLabel("专注时间、任务完成度、考试分数分别统计；打卡不能替代能力分。")
         sub.setObjectName("PageSub")
@@ -28,7 +28,7 @@ class HistoryPage(QWidget):
         top.addStretch(1)
         layout.addLayout(top)
         self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(["Period", "Focus", "Task %", "Avg Score", "Exams", "Passed"])
+        self.table.setHorizontalHeaderLabels(["周期", "专注时间", "任务完成度", "平均分", "考试次数", "通过次数"])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         layout.addWidget(self.table, 1)
         self.refresh()

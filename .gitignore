@@ -16,11 +16,16 @@ env/
 .DS_Store
 Thumbs.db
 
-# Local data
+# Local runtime data (never commit the live DB)
 data/
 *.db
 *.sqlite
 *.sqlite3
+
+# Explicitly allow the consistent Git snapshot
+!sync/
+!sync/learningci.db
+!sync/说明.md
 
 # Logs
 logs/

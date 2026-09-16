@@ -45,9 +45,9 @@ def ensure_plan_imported(db: Database, path: Path) -> int:
     if existing:
         if existing["plan_hash"] != digest:
             raise RuntimeError(
-                "Frozen plan file changed after import. LearningCI refuses to silently rewrite an active route.\n\n"
-                "If you are upgrading the early v0.1.0 MVP to v0.1.1 and have no important learning history yet, "
-                "run reset_local_data.bat once; it backs up the old database before resetting local state."
+                "冻结计划文件在导入后发生了变化。LearningCI 拒绝静默改写正在执行的路线。\n\n"
+                "如果这是一次明确的软件升级，请先备份 data/learningci.db；"
+                "只有确认要采用新计划版本时才执行迁移或重置。"
             )
         return int(existing["id"])
 

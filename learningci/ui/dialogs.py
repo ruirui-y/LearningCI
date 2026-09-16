@@ -12,6 +12,15 @@ from PyQt6.QtWidgets import (
 from learningci.core.prompt_builder import build_grade_prompt, build_test_prompt
 
 
+DIMENSION_ZH = {
+    "explanation": "解释",
+    "prediction": "预测",
+    "implementation": "实现",
+    "diagnosis": "诊断",
+    "transfer": "迁移",
+}
+
+
 class JsonPasteDialog(QDialog):
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
@@ -44,10 +53,14 @@ class AssessmentDialog(QDialog):
         self.attempt_id: int | None = None
         self.test_json: dict | None = None
         self.answer_editors: dict[str, QTextEdit] = {}
-        self.setWindowTitle("LearningCI - 复测" if review else "LearningCI - Verification")
-        self.resize(1040, 860)
-        self.setMinimumSize(900, 680)
+        self.setWindowTitle("LearningCI - 复测" if review else "LearningCI - 正式测试")
+        self.resize(1080, 880)
+        self.setMinimumSize(920, 700)
         self._build_ui()
+        if self.review:
+            self._set_review_empty_state()
+        else:
+            self._load_frozen_verification()
         self._refresh_state()
 
     def _build_ui(self) -> None:
@@ -58,21 +71,34 @@ class AssessmentDialog(QDialog):
         title = QLabel(f"{self.node['node_code']}  {self.node['title']}")
         title.setObjectName("PageTitle")
         root.addWidget(title)
-        sub = QLabel("复测试卷必须换场景、换数据、换代码。" if self.review else "正式 Verification：AI 只出题与评分，本地规则决定 PASS / FAIL。")
+        sub = QLabel(
+            "复测试卷必须换场景、换数据、换代码。" if self.review
+            else "正式测试：试卷已在节点开始前冻结；未通过只重做同一张试卷，不改学习路线。"
+        )
         sub.setObjectName("Secondary")
+        sub.setWordWrap(True)
         root.addWidget(sub)
 
-        bar = QHBoxLayout()
-        self.copy_test_btn = QPushButton("复制出题 Prompt")
-        self.copy_test_btn.setObjectName("PrimaryButton")
-        self.paste_test_btn = QPushButton("粘贴试卷 JSON")
-        self.paste_test_btn.setObjectName("SecondaryButton")
-        bar.addWidget(self.copy_test_btn)
-        bar.addWidget(self.paste_test_btn)
-        bar.addStretch(1)
-        root.addLayout(bar)
+        self.paper_bar = QHBoxLayout()
+        self.paper_label = QLabel("")
+        self.paper_label.setObjectName("ProjectPath")
+        self.paper_bar.addWidget(self.paper_label)
+        self.paper_bar.addStretch(1)
+        root.addLayout(self.paper_bar)
 
-        note = QLabel("粘贴试卷后，每一道题会自动生成独立回答框；问题会固定显示在回答框上方，不需要来回翻看。")
+        self.review_test_bar = QHBoxLayout()
+        self.copy_test_btn = QPushButton("复制复测出题提示词")
+        self.copy_test_btn.setObjectName("PrimaryButton")
+        self.paste_test_btn = QPushButton("粘贴复测试卷 JSON")
+        self.paste_test_btn.setObjectName("SecondaryButton")
+        self.review_test_bar.addWidget(self.copy_test_btn)
+        self.review_test_bar.addWidget(self.paste_test_btn)
+        self.review_test_bar.addStretch(1)
+        root.addLayout(self.review_test_bar)
+
+        note = QLabel(
+            "每一道题都有独立回答框。主线首次正式测试使用固定试卷；只有 3日/7日/14日/30日复测才要求重新出不同场景的试卷。"
+        )
         note.setObjectName("Muted")
         note.setWordWrap(True)
         root.addWidget(note)
@@ -84,30 +110,30 @@ class AssessmentDialog(QDialog):
         self.question_layout = QVBoxLayout(self.question_host)
         self.question_layout.setContentsMargins(0, 0, 4, 0)
         self.question_layout.setSpacing(10)
-        empty = QLabel("尚未导入试卷。先复制出题 Prompt，在聊天式 AI 中生成 JSON，再粘贴回来。")
-        empty.setObjectName("Secondary")
-        empty.setWordWrap(True)
-        self.question_layout.addWidget(empty)
-        self.question_layout.addStretch(1)
         self.question_scroll.setWidget(self.question_host)
         root.addWidget(self.question_scroll, 1)
 
         bottom = QHBoxLayout()
         self.save_answer_btn = QPushButton("保存全部回答")
         self.save_answer_btn.setObjectName("SecondaryButton")
-        self.copy_grade_btn = QPushButton("复制评分 Prompt")
+        self.copy_grade_btn = QPushButton("复制评分提示词")
         self.copy_grade_btn.setObjectName("PrimaryButton")
         self.paste_grade_btn = QPushButton("粘贴评分 JSON")
         self.paste_grade_btn.setObjectName("SecondaryButton")
+        self.retry_btn = QPushButton("重新作答同一冻结试卷")
+        self.retry_btn.setObjectName("DangerButton")
+        self.retry_btn.setVisible(False)
         bottom.addWidget(self.save_answer_btn)
         bottom.addWidget(self.copy_grade_btn)
         bottom.addWidget(self.paste_grade_btn)
+        bottom.addWidget(self.retry_btn)
         bottom.addStretch(1)
         root.addLayout(bottom)
 
         self.result_label = QLabel("等待试卷")
         self.result_label.setObjectName("ResultBanner")
         self.result_label.setProperty("status", "info")
+        self.result_label.setWordWrap(True)
         root.addWidget(self.result_label)
 
         self.copy_test_btn.clicked.connect(self._copy_test_prompt)
@@ -115,6 +141,34 @@ class AssessmentDialog(QDialog):
         self.save_answer_btn.clicked.connect(self._save_answer)
         self.copy_grade_btn.clicked.connect(self._copy_grade_prompt)
         self.paste_grade_btn.clicked.connect(self._paste_grade)
+        self.retry_btn.clicked.connect(self._retry_same_paper)
+
+    def _set_review_empty_state(self) -> None:
+        self.review_test_bar.setEnabled(True)
+        self.paper_label.setText(f"复测类型：{self.review.get('review_type')} · 到期日：{self.review.get('due_date')}")
+        self._clear_questions()
+        empty = QLabel("复测必须使用一张新试卷。先复制复测出题提示词，再粘贴 AI 返回的 JSON。")
+        empty.setObjectName("Secondary")
+        empty.setWordWrap(True)
+        self.question_layout.addWidget(empty)
+        self.question_layout.addStretch(1)
+        self.result_label.setText("等待新的复测试卷")
+
+    def _load_frozen_verification(self) -> None:
+        self.copy_test_btn.setVisible(False)
+        self.paste_test_btn.setVisible(False)
+        paper = self.service.get_frozen_verification_paper(self.node["id"])
+        self.test_json = {k: v for k, v in paper.items() if not k.startswith("_")}
+        self.attempt_id = self.service.ensure_verification_attempt(self.node["id"])
+        attempt = self.service.get_attempt(self.attempt_id)
+        self.test_json = attempt["test"]
+        self.paper_label.setText(
+            f"固定试卷 {paper.get('_paper_code', paper.get('paper_id', 'V1'))} · 从节点开始即固定 · 未通过后继续使用同一试卷"
+        )
+        self._render_questions(self.test_json, attempt.get("answers", {}))
+        self.result_label.setText(f"第 {attempt['attempt_no']} 次作答 · 请闭卷作答")
+        self.result_label.setProperty("status", "info")
+        self._repolish(self.result_label)
 
     def _refresh_state(self) -> None:
         has_attempt = self.attempt_id is not None and self.test_json is not None
@@ -123,10 +177,12 @@ class AssessmentDialog(QDialog):
         self.save_answer_btn.setEnabled(has_attempt)
 
     def _copy_test_prompt(self) -> None:
+        if not self.review:
+            return
         previous = self.service.previous_tests(self.node["id"])
-        text = build_test_prompt(self.node, previous, is_retest=bool(self.review))
+        text = build_test_prompt(self.node, previous, is_retest=True)
         QGuiApplication.clipboard().setText(text)
-        QMessageBox.information(self, "已复制", "出题 Prompt 已复制。把它粘贴到聊天式 AI，AI 只返回 JSON。")
+        QMessageBox.information(self, "已复制", "复测出题提示词已复制。复测题必须换场景，AI 只返回 JSON。")
 
     def _validate_test(self, data: dict) -> None:
         questions = data.get("questions")
@@ -161,27 +217,25 @@ class AssessmentDialog(QDialog):
             total += max_score
             if not str(question.get("question", "")).strip():
                 raise ValueError(f"{dimension} 题目为空")
-        if seen != set(expected):
-            raise ValueError("五个评分维度必须全部出现")
-        if total != 100:
-            raise ValueError("试卷总分必须严格等于 100")
+        if seen != set(expected) or total != 100:
+            raise ValueError("五个评分维度必须全部出现，且总分必须严格等于 100")
         node_id = data.get("node_id")
         if node_id and node_id != self.node["node_code"]:
             raise ValueError("试卷 node_id 与当前冻结节点不一致")
 
     def _paste_test(self) -> None:
-        dlg = JsonPasteDialog("粘贴正式试卷", self)
+        if not self.review:
+            return
+        dlg = JsonPasteDialog("粘贴复测试卷", self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         try:
             data = dlg.value()
             self._validate_test(data)
             self.test_json = data
-            self.attempt_id = self.service.create_attempt(
-                self.node["id"], data, self.review["id"] if self.review else None
-            )
+            self.attempt_id = self.service.create_attempt(self.node["id"], data, self.review["id"])
             self._render_questions(data)
-            self.result_label.setText("试卷已导入 · 请逐题作答")
+            self.result_label.setText("复测试卷已导入 · 请逐题作答")
             self.result_label.setProperty("status", "info")
             self._repolish(self.result_label)
             self._refresh_state()
@@ -196,8 +250,9 @@ class AssessmentDialog(QDialog):
                 widget.deleteLater()
         self.answer_editors.clear()
 
-    def _render_questions(self, data: dict) -> None:
+    def _render_questions(self, data: dict, answers: dict[str, str] | None = None) -> None:
         self._clear_questions()
+        answers = answers or {}
         placeholders = {
             "explanation": "闭卷解释。不要只写定义；写清为什么、边界与因果关系。",
             "prediction": "先写预测，再写依据。不要先运行后补答案。",
@@ -212,9 +267,7 @@ class AssessmentDialog(QDialog):
             card_layout.setContentsMargins(14, 12, 14, 14)
             card_layout.setSpacing(8)
 
-            header = QLabel(
-                f"Q{index}  ·  {q.get('dimension', '?').upper()}  ·  {q.get('max_score', '?')} 分"
-            )
+            header = QLabel(f"Q{index}  ·  {DIMENSION_ZH.get(q.get('dimension'), q.get('dimension', '?'))}  ·  {q.get('max_score', '?')} 分")
             header.setObjectName("QuestionHeader")
             header.setProperty("dimension", q.get("dimension", ""))
             card_layout.addWidget(header)
@@ -227,11 +280,12 @@ class AssessmentDialog(QDialog):
 
             answer = QTextEdit()
             answer.setObjectName("AnswerEditor")
-            answer.setMinimumHeight(120)
+            answer.setMinimumHeight(130)
             answer.setPlaceholderText(placeholders.get(q.get("dimension"), "在这里回答。"))
+            qid = str(q.get("id"))
+            answer.setPlainText(str(answers.get(qid, "")))
             card_layout.addWidget(answer)
 
-            qid = str(q.get("id"))
             self.answer_editors[qid] = answer
             self.question_layout.addWidget(card)
         self.question_layout.addStretch(1)
@@ -255,11 +309,13 @@ class AssessmentDialog(QDialog):
         if empty:
             QMessageBox.warning(self, "存在未回答题目", f"以下题目仍为空：{', '.join(empty)}")
             return
-        answer_json = json.dumps(answers, ensure_ascii=False, indent=2)
-        self.service.save_answer(self.attempt_id, answer_json)
+        self.service.save_answer(self.attempt_id, json.dumps(answers, ensure_ascii=False, indent=2))
         prompt = build_grade_prompt(self.node, self.test_json, answers)
         QGuiApplication.clipboard().setText(prompt)
-        QMessageBox.information(self, "已复制", "评分 Prompt 已复制。AI 只给五维分数与证据；PASS / FAIL 仍由 LearningCI 本地规则计算。")
+        QMessageBox.information(
+            self, "已复制",
+            "评分提示词已复制。AI 只给五维分数与证据；是否通过仍由 LearningCI 本地规则计算。",
+        )
 
     def _paste_grade(self) -> None:
         if self.attempt_id is None:
@@ -271,23 +327,44 @@ class AssessmentDialog(QDialog):
             grade = dlg.value()
             result = self.service.grade_attempt(self.attempt_id, grade)
             if result["passed"]:
-                self.result_label.setText(f"PASS  {result['total']} / 100")
+                self.result_label.setText(f"通过  {result['total']} / 100")
                 self.result_label.setProperty("status", "pass")
+                self.retry_btn.setVisible(False)
             else:
                 reasons = "；".join(result["failures"])
-                self.result_label.setText(f"FAIL  {result['total']} / 100  |  {reasons}\n当前节点不推进，请生成一套不同试卷重新验证。")
+                if self.review:
+                    self.result_label.setText(
+                        f"未通过  {result['total']} / 100  |  {reasons}\n复测未通过：进入补强队列；再次复测时必须使用新的变化题。"
+                    )
+                    self.copy_test_btn.setEnabled(True)
+                    self.paste_test_btn.setEnabled(True)
+                else:
+                    self.result_label.setText(
+                        f"未通过  {result['total']} / 100  |  {reasons}\n当前节点不推进。下一次作答继续使用同一张冻结试卷，不换题。"
+                    )
+                    self.retry_btn.setVisible(True)
+                    self.retry_btn.setEnabled(True)
                 self.result_label.setProperty("status", "fail")
             self._repolish(self.result_label)
             self.graded.emit()
-
-            # Failed attempts may immediately generate a new paper, including review attempts.
-            self.copy_test_btn.setEnabled(not result["passed"])
-            self.paste_test_btn.setEnabled(not result["passed"])
             self.copy_grade_btn.setEnabled(False)
             self.paste_grade_btn.setEnabled(False)
             self.save_answer_btn.setEnabled(False)
         except Exception as exc:
             QMessageBox.critical(self, "评分 JSON 无效", str(exc))
+
+    def _retry_same_paper(self) -> None:
+        if self.review:
+            return
+        self.attempt_id = self.service.ensure_verification_attempt(self.node["id"])
+        attempt = self.service.get_attempt(self.attempt_id)
+        self.test_json = attempt["test"]
+        self._render_questions(self.test_json, attempt.get("answers", {}))
+        self.result_label.setText(f"第 {attempt['attempt_no']} 次作答 · 同一冻结试卷重新作答")
+        self.result_label.setProperty("status", "info")
+        self._repolish(self.result_label)
+        self.retry_btn.setVisible(False)
+        self._refresh_state()
 
     @staticmethod
     def _repolish(widget: QWidget) -> None:

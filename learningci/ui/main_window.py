@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton, QSizePolicy,
+    QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
     QStackedWidget, QVBoxLayout, QWidget
 )
 
+from learningci.ui.data_sync_page import DataSyncPage
 from learningci.ui.history_page import HistoryPage
 from learningci.ui.parking_page import ParkingPage
 from learningci.ui.plan_page import PlanPage
+from learningci.ui.node_prepare_page import NodePreparePage
 from learningci.ui.reviews_page import ReviewsPage
 from learningci.ui.today_page import TodayPage
 
@@ -18,8 +19,8 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.service = service
         self.setWindowTitle("LearningCI")
-        self.resize(1320, 820)
-        self.setMinimumSize(1100, 700)
+        self.resize(1440, 900)
+        self.setMinimumSize(1180, 760)
         self.nav_buttons: list[QPushButton] = []
         self.pages: list[QWidget] = []
         self._build_ui()
@@ -33,13 +34,13 @@ class MainWindow(QMainWindow):
 
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(210)
+        sidebar.setFixedWidth(220)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(14, 18, 14, 18)
         side.setSpacing(6)
         title = QLabel("LearningCI")
         title.setObjectName("AppTitle")
-        sub = QLabel("Human CI · v0.1.1")
+        sub = QLabel("能力验证系统 · v0.3.0")
         sub.setObjectName("AppSub")
         side.addWidget(title)
         side.addWidget(sub)
@@ -48,11 +49,13 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.today = TodayPage(self.service)
         self.plan = PlanPage(self.service)
+        self.prepare = NodePreparePage(self.service)
         self.reviews = ReviewsPage(self.service)
         self.history = HistoryPage(self.service)
         self.parking = ParkingPage(self.service)
-        self.pages = [self.today, self.plan, self.reviews, self.history, self.parking]
-        labels = ["Today", "Frozen Plan", "Reviews", "History", "Parking Lot"]
+        self.sync = DataSyncPage(self.service)
+        self.pages = [self.today, self.plan, self.prepare, self.reviews, self.history, self.parking, self.sync]
+        labels = ["今日学习", "冻结计划", "节点准备", "复测队列", "学习统计", "想法停车场", "数据同步"]
         for index, (label, page) in enumerate(zip(labels, self.pages)):
             self.stack.addWidget(page)
             btn = QPushButton(label)
@@ -63,10 +66,10 @@ class MainWindow(QMainWindow):
             side.addWidget(btn)
 
         side.addStretch(1)
-        lock = QLabel("● ROUTE LOCKED")
+        lock = QLabel("● 路线与已冻结试卷受保护")
         lock.setProperty("status", "info")
         side.addWidget(lock)
-        lock_sub = QLabel("计划只能通过版本化 plan.json 更新")
+        lock_sub = QLabel("plan.json 固定学习路线\n节点执行包仅在冻结前允许细化")
         lock_sub.setWordWrap(True)
         lock_sub.setObjectName("AppSub")
         side.addWidget(lock_sub)
@@ -75,6 +78,8 @@ class MainWindow(QMainWindow):
         root.addWidget(self.stack, 1)
 
         self.today.data_changed.connect(self._refresh_all)
+        self.sync.data_changed.connect(self._refresh_all)
+        self.prepare.data_changed.connect(self._refresh_all)
 
     def _select_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
@@ -88,15 +93,15 @@ class MainWindow(QMainWindow):
 
     def _refresh_all(self) -> None:
         for page in self.pages:
-            if page is not self.today and hasattr(page, "refresh"):
+            if hasattr(page, "refresh"):
                 page.refresh()
 
     def closeEvent(self, event) -> None:
-        if self.service.active_focus_session():
+        if self.service.active_focus_session() or self.service.active_task_session():
             reply = QMessageBox.question(
                 self,
                 "学习计时仍在进行",
-                "当前专注计时尚未结束。LearningCI 不允许静默退出并继续累计时间。\n\n结束学习并退出？",
+                "当前总专注或叶子任务计时尚未结束。LearningCI 不允许静默退出并继续累计时间。\n\n结束学习并退出？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel,
             )

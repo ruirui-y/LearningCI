@@ -222,6 +222,76 @@ def build_qss() -> str:
     QLabel[status="warn"] {{ color: {WARNING}; }}
     QLabel[status="info"] {{ color: {PRIMARY}; }}
 
+
+    QFrame#TaskDetailCard {{
+        background-color: #141820;
+        border: 1px solid {BORDER};
+        border-radius: 9px;
+    }}
+    QFrame#WarningCard {{
+        background-color: #241D12;
+        border: 1px solid #5C4722;
+        border-radius: 9px;
+    }}
+    QLabel#TaskCriteria {{
+        color: {TEXT_SECONDARY};
+        background-color: {CARD_BG_ALT};
+        border: 1px solid {BORDER};
+        border-radius: 6px;
+        padding: 8px;
+    }}
+    QLabel#TaskTimer {{
+        color: {PRIMARY};
+        font-size: 13px;
+        font-weight: 700;
+    }}
+    QLabel#WarnNote {{
+        color: {WARNING};
+    }}
+
+    QTreeWidget#TaskTree, QTreeWidget#PaperPreviewTree {{
+        background-color: {CARD_BG};
+        alternate-background-color: {CARD_BG};
+        color: {TEXT_PRIMARY};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+        outline: 0;
+        selection-background-color: {SELECTION};
+        selection-color: {TEXT_PRIMARY};
+    }}
+    QTreeWidget#TaskTree::item, QTreeWidget#PaperPreviewTree::item {{
+        padding: 5px 4px;
+        border-bottom: 1px solid #202630;
+    }}
+    QTreeWidget#TaskTree::item:hover, QTreeWidget#PaperPreviewTree::item:hover {{
+        background-color: #222A35;
+    }}
+    QTreeWidget#TaskTree::item:selected, QTreeWidget#PaperPreviewTree::item:selected {{
+        background-color: {SELECTION};
+    }}
+    QTreeWidget#TaskTree::branch, QTreeWidget#PaperPreviewTree::branch {{
+        background: transparent;
+    }}
+    QTreeWidget QHeaderView::section {{
+        background-color: {CARD_BG_ALT};
+        color: {TEXT_SECONDARY};
+        border: none;
+        border-bottom: 1px solid {BORDER};
+        padding: 6px;
+        font-weight: 600;
+    }}
+    QSplitter#TaskSplitter::handle {{
+        background-color: {BORDER};
+        width: 2px;
+    }}
+    QScrollArea#TodayScroll {{
+        border: none;
+        background: transparent;
+    }}
+    QScrollArea#TodayScroll > QWidget > QWidget {{
+        background: transparent;
+    }}
+
     QToolTip {{ background-color: {CARD_BG_ALT}; color: {TEXT_PRIMARY}; border: 1px solid {BORDER}; padding: 4px 6px; }}
     QMessageBox {{ background-color: {CARD_BG}; }}
     """

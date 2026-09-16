@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = r"""
 PRAGMA foreign_keys = ON;
@@ -49,6 +50,32 @@ CREATE TABLE IF NOT EXISTS nodes (
 );
 CREATE INDEX IF NOT EXISTS idx_nodes_plan_order ON nodes(plan_id, order_index);
 
+CREATE TABLE IF NOT EXISTS node_bundles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id INTEGER NOT NULL UNIQUE REFERENCES nodes(id) ON DELETE CASCADE,
+    bundle_hash TEXT NOT NULL,
+    bundle_json TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    imported_at TEXT NOT NULL,
+    bundle_state TEXT NOT NULL DEFAULT 'GENERATED',
+    revision INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS assessment_papers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    paper_code TEXT NOT NULL UNIQUE,
+    paper_kind TEXT NOT NULL,
+    paper_version INTEGER NOT NULL DEFAULT 1,
+    paper_hash TEXT NOT NULL,
+    paper_json TEXT NOT NULL,
+    source_bundle_hash TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_papers_node_kind ON assessment_papers(node_id, paper_kind);
+
+-- v0.1.x coarse task progress kept for backward compatibility/history.
 CREATE TABLE IF NOT EXISTS task_progress (
     day TEXT NOT NULL,
     node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
@@ -57,6 +84,21 @@ CREATE TABLE IF NOT EXISTS task_progress (
     completed_at TEXT,
     PRIMARY KEY(day, node_id, task_index)
 );
+
+CREATE TABLE IF NOT EXISTS leaf_task_progress (
+    node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    task_code TEXT NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    source_path TEXT NOT NULL DEFAULT '',
+    function_name TEXT NOT NULL DEFAULT '',
+    evidence_note TEXT NOT NULL DEFAULT '',
+    total_seconds INTEGER NOT NULL DEFAULT 0,
+    first_started_at TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(node_id, task_code)
+);
+CREATE INDEX IF NOT EXISTS idx_leaf_tasks_node ON leaf_task_progress(node_id, completed);
 
 CREATE TABLE IF NOT EXISTS focus_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +109,27 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_focus_started ON focus_sessions(started_at);
+
+CREATE TABLE IF NOT EXISTS task_focus_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    task_code TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    duration_seconds INTEGER,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_focus_active ON task_focus_sessions(ended_at, node_id);
+
+CREATE TABLE IF NOT EXISTS daily_progress_snapshots (
+    day TEXT NOT NULL,
+    node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    done_required INTEGER NOT NULL,
+    total_required INTEGER NOT NULL,
+    completion_pct INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(day, node_id)
+);
 
 CREATE TABLE IF NOT EXISTS attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,7 +197,44 @@ class Database:
 
     def initialize(self) -> None:
         self.conn.executescript(SCHEMA_SQL)
+        self._migrate_schema()
+        self.conn.execute(
+            "INSERT INTO app_meta(key,value) VALUES('schema_version',?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(SCHEMA_VERSION),),
+        )
         self.conn.commit()
+
+    def _migrate_schema(self) -> None:
+        """Idempotent lightweight migrations for existing v0.2.x databases."""
+        columns = {row[1] for row in self.conn.execute("PRAGMA table_info(node_bundles)").fetchall()}
+        if "bundle_state" not in columns:
+            self.conn.execute("ALTER TABLE node_bundles ADD COLUMN bundle_state TEXT NOT NULL DEFAULT 'GENERATED'")
+        if "revision" not in columns:
+            self.conn.execute("ALTER TABLE node_bundles ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
+        if "updated_at" not in columns:
+            self.conn.execute("ALTER TABLE node_bundles ADD COLUMN updated_at TEXT")
+
+        # v0.2.0 already stored compiler.status inside bundle_json. Promote that state into
+        # a dedicated column once so future generated bundles remain replaceable until frozen.
+        rows = self.conn.execute(
+            "SELECT id,bundle_json,bundle_state,updated_at,imported_at FROM node_bundles"
+        ).fetchall()
+        import json
+        for row in rows:
+            state = row["bundle_state"] or "GENERATED"
+            if state == "GENERATED":
+                try:
+                    data = json.loads(row["bundle_json"])
+                    raw = str(data.get("compiler", {}).get("status", "GENERATED")).upper()
+                    if raw in {"REVIEWED", "FROZEN"}:
+                        state = raw
+                except Exception:
+                    pass
+            self.conn.execute(
+                "UPDATE node_bundles SET bundle_state=?, updated_at=COALESCE(updated_at,imported_at) WHERE id=?",
+                (state, row["id"]),
+            )
 
     def close(self) -> None:
         self.conn.close()
@@ -147,3 +247,39 @@ class Database:
         except Exception:
             self.conn.rollback()
             raise
+
+    def backup_to(self, target: Path) -> Path:
+        """Create a consistent SQLite snapshot using sqlite3_backup, even while app is open."""
+        target = Path(target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        if tmp.exists():
+            tmp.unlink()
+        self.conn.commit()
+        with sqlite3.connect(tmp) as dst:
+            self.conn.backup(dst)
+            dst.execute("PRAGMA journal_mode=DELETE")
+            dst.commit()
+        if target.exists():
+            target.unlink()
+        tmp.replace(target)
+        return target
+
+    def restore_from(self, source: Path) -> None:
+        """Restore a snapshot into the live local database connection."""
+        source = Path(source)
+        if not source.exists():
+            raise FileNotFoundError(source)
+        with sqlite3.connect(source) as src:
+            src.row_factory = sqlite3.Row
+            ok = src.execute("PRAGMA integrity_check").fetchone()[0]
+            if ok != "ok":
+                raise RuntimeError(f"同步快照 integrity_check 失败: {ok}")
+            if not src.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='plans'").fetchone():
+                raise RuntimeError("同步快照不是有效的 LearningCI 数据库：缺少 plans 表")
+            src.backup(self.conn)
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.commit()
+
+    def integrity_check(self) -> str:
+        return str(self.conn.execute("PRAGMA integrity_check").fetchone()[0])

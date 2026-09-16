@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QAbstractItemView, QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
+from learningci.ui.common import bundle_state_text, learning_state_text, priority_text
+
 
 class PlanPage(QWidget):
     def __init__(self, service, parent=None):
@@ -9,27 +11,46 @@ class PlanPage(QWidget):
         self.service = service
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 24)
-        title = QLabel("Frozen Plan")
+        title = QLabel("冻结计划")
         title.setObjectName("PageTitle")
-        sub = QLabel("只读。CORE 主线按顺序推进；OPTIONAL 节点不会阻塞主线，也不能在普通学习日临时激活。")
+        sub = QLabel(
+            "只读。plan.json 决定主路线；‘节点执行包’决定某个 Node 具体怎么做以及首次固定试卷。"
+            "主线节点按顺序推进，可选节点不阻塞主线。"
+        )
         sub.setObjectName("PageSub")
         sub.setWordWrap(True)
         layout.addWidget(title)
         layout.addWidget(sub)
-        self.table = QTableWidget(0, 8)
-        self.table.setHorizontalHeaderLabels(["Order", "Node", "Stage", "Priority", "Title", "Status", "Current", "Stable"])
+        legend = QLabel(
+            "字段说明：执行包状态 = 当前 Node 的任务清单是否已细化/审核/冻结；"
+            "固定试卷 = 这个 Node 第一次正式验收使用的试卷；"
+            "学习状态 = 当前是否轮到它；稳定分 = 把延迟复测后的掉分也算进去的长期成绩。"
+        )
+        legend.setObjectName("Secondary")
+        legend.setWordWrap(True)
+        layout.addWidget(legend)
+        self.table = QTableWidget(0, 11)
+        self.table.setHorizontalHeaderLabels([
+            "顺序", "Node", "阶段", "优先级", "Title", "叶子任务", "执行包状态", "固定试卷", "学习状态", "当前分", "稳定分"
+        ])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setToolTip(
+            "执行包状态：草稿（待细化）→ 已审核（可冻结）→ 已冻结。\n"
+            "固定试卷：节点开始时就能预览，首次未通过时继续使用同一张试卷。"
+        )
         layout.addWidget(self.table, 1)
         self.refresh()
 
     def refresh(self) -> None:
-        nodes = self.service.list_nodes()
+        nodes = self.service.list_preparation_nodes()
         self.table.setRowCount(len(nodes))
         for r, node in enumerate(nodes):
             values = [
-                node["order_index"], node["node_code"], node["stage"], node["priority"], node["title"], node["status"],
+                node["order_index"], node["node_code"], node["stage"], priority_text(node["priority"]), node["title"],
+                node["task_count"], bundle_state_text(node["bundle_state"]), node["paper_id"],
+                learning_state_text(node["learning_state"]),
                 "-" if node["current_score"] is None else node["current_score"],
                 "-" if node["stable_score"] is None else node["stable_score"],
             ]

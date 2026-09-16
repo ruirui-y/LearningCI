@@ -9,7 +9,7 @@ class ParkingPage(QWidget):
         self.service = service
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 24)
-        title = QLabel("Parking Lot")
+        title = QLabel("想法停车场")
         title.setObjectName("PageTitle")
         sub = QLabel("想到更短路线、新技术、别的项目时只记录，不在今天处理。")
         sub.setObjectName("PageSub")
@@ -25,7 +25,7 @@ class ParkingPage(QWidget):
         row.addWidget(add_btn)
         layout.addLayout(row)
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Time", "Source Node", "Content", "Status"])
+        self.table.setHorizontalHeaderLabels(["记录时间", "来源 Node", "想法内容", "状态"])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table, 1)
@@ -41,7 +41,7 @@ class ParkingPage(QWidget):
         rows = self.service.list_parking()
         self.table.setRowCount(len(rows))
         for r, row in enumerate(rows):
-            vals = [row["created_at"], row["node_code"] or "-", row["content"], row["status"]]
+            vals = [row["created_at"], row["node_code"] or "-", row["content"], "待复盘" if row["status"] == "PENDING" else row["status"]]
             for c, v in enumerate(vals):
                 self.table.setItem(r, c, QTableWidgetItem(str(v)))
         self.table.resizeColumnsToContents()

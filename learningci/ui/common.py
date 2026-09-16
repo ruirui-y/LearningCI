@@ -40,3 +40,35 @@ def format_duration(seconds: int) -> str:
 
 def format_hours(seconds: int) -> str:
     return f"{seconds / 3600:.1f} h"
+
+BUNDLE_STATE_ZH = {
+    "GENERATED": "草稿（待细化）",
+    "REVIEWED": "已审核（可冻结）",
+    "FROZEN": "已冻结",
+    "MISSING": "缺失",
+}
+
+LEARNING_STATE_ZH = {
+    "CURRENT": "当前节点",
+    "PREP_REQUIRED": "当前节点待准备",
+    "LOCKED": "未解锁",
+    "PASSED": "已通过",
+    "OPTIONAL": "可选研究",
+}
+
+PRIORITY_ZH = {
+    "CORE": "主线",
+    "OPTIONAL": "可选",
+}
+
+
+def bundle_state_text(value: str) -> str:
+    return BUNDLE_STATE_ZH.get(str(value).upper(), str(value))
+
+
+def learning_state_text(value: str) -> str:
+    return LEARNING_STATE_ZH.get(str(value).upper(), str(value))
+
+
+def priority_text(value: str) -> str:
+    return PRIORITY_ZH.get(str(value).upper(), str(value))
