@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.3 - 2026-09-16
+
+- Fix Windows WinError 32 when updating `sync/learningci.db`.
+- Write SQLite backup directly to the destination instead of unlink/rename replacement.
+- Validate generated snapshots with `PRAGMA integrity_check`.
+
 ## v0.2.0 - 2026-09-16
 
 - 新增 Detailed Node Bundle 架构：路线与执行细节分离。

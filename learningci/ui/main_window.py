@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         side.setSpacing(6)
         title = QLabel("LearningCI")
         title.setObjectName("AppTitle")
-        sub = QLabel("能力验证系统 · v0.3.0")
+        sub = QLabel("能力验证系统 · v0.3.3")
         sub.setObjectName("AppSub")
         side.addWidget(title)
         side.addWidget(sub)
@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
                 page.refresh()
 
     def closeEvent(self, event) -> None:
+        self.today.save_pending_edits()
         if self.service.active_focus_session() or self.service.active_task_session():
             reply = QMessageBox.question(
                 self,

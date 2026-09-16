@@ -33,9 +33,9 @@ class ServiceTests(unittest.TestCase):
         node = self.service.get_active_node()
         tree = self.service.get_leaf_task_tree(node["id"])
         tasks = [item for group in tree for item in group["items"]]
-        self.assertEqual(len(tasks), 41)
+        self.assertEqual(len(tasks), 30)
         done, total, pct = self.service.task_completion(node["id"])
-        self.assertEqual((done, total, pct), (0, 41, 0))
+        self.assertEqual((done, total, pct), (0, 30, 0))
 
     def test_evidence_required_before_completion(self):
         node = self.service.get_active_node()
@@ -47,8 +47,47 @@ class ServiceTests(unittest.TestCase):
         self.service.set_leaf_task_completed(node["id"], task["id"], True)
         done, total, pct = self.service.task_completion(node["id"])
         self.assertEqual(done, 1)
-        self.assertEqual(total, 41)
+        self.assertEqual(total, 30)
         self.assertGreater(pct, 0)
+
+
+    def test_section_assessment_uses_leaf_evidence_and_invalidates_on_edit(self):
+        node = self.service.get_active_node()
+        group = self.service.get_leaf_task_tree(node["id"])[0]
+        for item in group["items"]:
+            self.service.save_leaf_task_evidence(
+                node["id"], item["id"],
+                source_path="muduo/net/EventLoop.cc",
+                function_name="EventLoop::loop",
+                note=f"{item['id']} evidence",
+            )
+            self.service.set_leaf_task_completed(node["id"], item["id"], True)
+        result = self.service.save_section_assessment(node["id"], group["id"], {
+            "node_id": node["node_code"],
+            "section_id": group["id"],
+            "scores": {"理解准确度": 31, "源码证据": 27, "边界判断": 22, "覆盖完整度": 9},
+            "evidence": ["ok"],
+            "weaknesses": [],
+        })
+        self.assertTrue(result["passed"])
+        latest = self.service.get_section_assessment(node["id"], group["id"])
+        self.assertTrue(latest["passed"])
+        self.service.save_leaf_task_evidence(
+            node["id"], group["items"][0]["id"],
+            source_path="muduo/net/EventLoop.cc",
+            function_name="EventLoop::loop",
+            note="changed evidence",
+        )
+        latest = self.service.get_section_assessment(node["id"], group["id"])
+        self.assertTrue(latest["stale"])
+        self.assertFalse(latest["passed"])
+
+    def test_s0_01_verification_no_longer_requires_manual_audit_document(self):
+        node = self.service.get_active_node()
+        paper = self.service.get_frozen_verification_paper(node["id"])
+        impl = next(q for q in paper["questions"] if q["dimension"] == "implementation")
+        self.assertIn("不额外撰写审计总结文档", impl["question"])
+        self.assertNotIn("完成 NebulaRPC/docs/history/MYMUDUO_AUDIT.md", impl["question"])
 
     def test_fixed_verification_paper_is_reused_after_fail(self):
         node = self.service.get_active_node()

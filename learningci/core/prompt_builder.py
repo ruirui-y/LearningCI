@@ -111,3 +111,70 @@ def build_grade_prompt(node: dict, test_json: dict, answers: dict[str, str] | st
   "weaknesses": ["..."]
 }}
 """
+
+
+def build_section_grade_prompt(node: dict, group: dict) -> str:
+    """Build a strict, no-API prompt that grades one task section from existing leaf evidence.
+
+    The user should not have to write another summary. The examiner must judge mastery only from
+    the leaf-task records already entered in LearningCI.
+    """
+    lines = [
+        "你现在是 LearningCI 的严格小节考官。",
+        "",
+        "你不是学习路线推荐者，也不要要求我再写一份总结。",
+        "你的任务是：只根据这个小节已经完成的叶子任务回答与工程证据，判断我是否真正掌握。",
+        "",
+        f"Node：{node['node_code']}",
+        f"Title：{node['title']}",
+        f"节点能力：{node['capability']}",
+        f"小节 ID：{group.get('id')}",
+        f"小节名称：{group.get('title')}",
+        f"小节说明：{group.get('description', '')}",
+        "",
+        "评分结构固定为：",
+        "- 理解准确度：35",
+        "- 源码证据：30",
+        "- 边界判断：25",
+        "- 覆盖完整度：10",
+        "总分 100，LearningCI 本地以 >=80 判定小节通过。",
+        "",
+        "严格规则：",
+        "1. 只能依据下面已有叶子任务记录评分，不能因为措辞像正确答案就脑补缺失证据。",
+        "2. 不要求我重新归纳总结；叶子任务中的证据备注本身就是我的回答。",
+        "3. 源码路径、函数名、调用链、测试/日志等证据不充分时必须扣分。",
+        "4. 如果结论存在明显错误，即使任务全部勾选，也必须扣分并指出具体任务。",
+        "5. 不扩展到本节点 out_of_scope，不提供新的学习路线。",
+        "6. 只返回纯 JSON，不要 Markdown fence，不要附加解释。",
+        "",
+        "当前小节叶子任务记录：",
+    ]
+    for idx, item in enumerate(group.get("items", []), start=1):
+        lines.extend([
+            f"\n[{idx}] {item.get('title', '')}",
+            f"任务 ID：{item.get('id', '')}",
+            f"目的：{item.get('purpose', '')}",
+            f"操作：{item.get('detail', '')}",
+            "完成标准：" + "；".join(str(x) for x in item.get("done_when", [])),
+            f"完成状态：{'已完成' if item.get('completed') else '未完成'}",
+            f"源码/产物路径：{item.get('source_path', '')}",
+            f"函数/入口：{item.get('function_name', '')}",
+            f"证据备注：{item.get('evidence_note', '')}",
+        ])
+    lines.extend([
+        "",
+        "返回格式：",
+        "{",
+        f'  "node_id": "{node["node_code"]}",',
+        f'  "section_id": "{group.get("id")}",',
+        '  "scores": {',
+        '    "理解准确度": 0,',
+        '    "源码证据": 0,',
+        '    "边界判断": 0,',
+        '    "覆盖完整度": 0',
+        "  },",
+        '  "evidence": ["指出哪些叶子回答证明了掌握"],',
+        '  "weaknesses": ["如果有薄弱点，必须具体到任务 ID 或结论"]',
+        "}",
+    ])
+    return "\n".join(lines)

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = r"""
 PRAGMA foreign_keys = ON;
@@ -99,6 +99,25 @@ CREATE TABLE IF NOT EXISTS leaf_task_progress (
     PRIMARY KEY(node_id, task_code)
 );
 CREATE INDEX IF NOT EXISTS idx_leaf_tasks_node ON leaf_task_progress(node_id, completed);
+
+CREATE TABLE IF NOT EXISTS section_assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    group_id TEXT NOT NULL,
+    attempt_no INTEGER NOT NULL,
+    understanding INTEGER NOT NULL,
+    evidence INTEGER NOT NULL,
+    boundary INTEGER NOT NULL,
+    completeness INTEGER NOT NULL,
+    total INTEGER NOT NULL,
+    passed INTEGER NOT NULL,
+    evidence_hash TEXT NOT NULL,
+    grade_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(node_id, group_id, attempt_no)
+);
+CREATE INDEX IF NOT EXISTS idx_section_assessments_node_group
+    ON section_assessments(node_id, group_id, id);
 
 CREATE TABLE IF NOT EXISTS focus_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -249,20 +268,35 @@ class Database:
             raise
 
     def backup_to(self, target: Path) -> Path:
-        """Create a consistent SQLite snapshot using sqlite3_backup, even while app is open."""
+        """Create/update a consistent SQLite snapshot while the app is open.
+
+        Do not copy the live database file with shutil/copy: the live DB may be in WAL
+        mode and committed pages can still live in ``learningci.db-wal``.  Instead, let
+        SQLite copy a transactionally consistent view directly into the destination
+        database.
+
+        Writing directly to ``target`` also avoids the old Windows-only failure where
+        we created ``*.tmp`` and then tried to unlink/replace an existing
+        ``sync/learningci.db`` while another process briefly held a file handle.
+        """
         target = Path(target)
         target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        if tmp.exists():
-            tmp.unlink()
+
         self.conn.commit()
-        with sqlite3.connect(tmp) as dst:
+        # SQLite backup can overwrite an existing destination database safely; no
+        # filesystem unlink/rename is necessary.  A normal reader may keep the file
+        # open and SQLite will coordinate through database locks instead of Windows
+        # delete-sharing semantics.
+        with sqlite3.connect(target, timeout=10.0) as dst:
+            dst.execute("PRAGMA busy_timeout=10000")
             self.conn.backup(dst)
             dst.execute("PRAGMA journal_mode=DELETE")
             dst.commit()
-        if target.exists():
-            target.unlink()
-        tmp.replace(target)
+
+            ok = dst.execute("PRAGMA integrity_check").fetchone()[0]
+            if ok != "ok":
+                raise RuntimeError(f"同步快照 integrity_check 失败: {ok}")
+
         return target
 
     def restore_from(self, source: Path) -> None:

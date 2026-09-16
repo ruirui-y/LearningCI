@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -28,6 +29,25 @@ def today_iso() -> str:
 
 def row_to_dict(row) -> dict | None:
     return dict(row) if row is not None else None
+
+
+# v0.3.2: 早期 S0-01 执行包中存在“再写一遍审计结论/收束文档”的重复任务。
+# 用户已经在更细的叶子任务中逐项回答并留证据，因此这些历史任务不再要求手工执行。
+# 这里是一次明确的方法论迁移，不改变 plan.json 主路线，也不改已经记录的学习证据。
+LEGACY_REDUNDANT_TASKS: dict[str, set[str]] = {
+    "NRPC-S0-01": {
+        "S0-01-EL-07", "S0-01-TC-11", "S0-01-CO-06", "S0-01-CL-05", "S0-01-BF-06",
+        "S0-01-AU-01", "S0-01-AU-02", "S0-01-AU-03", "S0-01-AU-04", "S0-01-AU-05", "S0-01-AU-06",
+    }
+}
+
+SECTION_SCORE_MAX = {
+    "understanding": 35,
+    "evidence": 30,
+    "boundary": 25,
+    "completeness": 10,
+}
+SECTION_PASS_SCORE = 80
 
 
 class LearningService:
@@ -264,8 +284,15 @@ class LearningService:
             row = dict(node)
             row["bundle_state"] = info["state"]
             row["bundle_revision"] = info["revision"]
-            row["task_count"] = info["task_count"]
-            row["paper_id"] = info["paper_id"]
+            try:
+                effective_tree = self.get_leaf_task_tree_no_ensure_without_assessment(node["id"])
+                row["task_count"] = sum(len(g.get("items", [])) for g in effective_tree)
+            except Exception:
+                row["task_count"] = info["task_count"]
+            try:
+                row["paper_id"] = self.get_frozen_verification_paper(node["id"]).get("_paper_code", info["paper_id"])
+            except Exception:
+                row["paper_id"] = info["paper_id"]
             row["in_prepare_window"] = node["id"] in window_ids
             if node["status"] == "PASSED":
                 learning_state = "PASSED"
@@ -287,8 +314,25 @@ class LearningService:
         if not row:
             raise RuntimeError("当前节点没有固定 Verification 试卷")
         data = json.loads(row["paper_json"])
+        node = self.get_node(node_id)
+        # v0.3.2 methodology correction: S0-01 no longer asks the learner to manually rewrite
+        # MYMUDUO_AUDIT.md after every leaf answer. Section mastery is graded directly from
+        # the collected leaf evidence. The formal implementation question therefore also uses
+        # those existing records instead of demanding a duplicate audit document.
+        if node["node_code"] == "NRPC-S0-01":
+            for q in data.get("questions", []):
+                if q.get("dimension") == "implementation":
+                    q["question"] = (
+                        "不额外撰写审计总结文档。直接基于 LearningCI 已保存的叶子任务回答与工程证据，"
+                        "选择 EventLoop、TcpConnection、Connector/TcpClient、Buffer 中至少四条关键结论进行可复核证明。"
+                        "每条必须给出真实源码路径、函数/入口和你在叶子任务中记录的调用链或观察证据，并明确该结论说明 MyMuduo 已经解决了什么、"
+                        "还有什么边界。不得只说‘任务已完成’，也不得重新实现 Reactor。"
+                    )
+                    break
+            data["paper_id"] = "NRPC-S0-01-V1.1"
+            data["version"] = 2
         data["_paper_hash"] = row["paper_hash"]
-        data["_paper_code"] = row["paper_code"]
+        data["_paper_code"] = data.get("paper_id", row["paper_code"])
         return data
 
     # ---------- Legacy coarse daily tasks ----------
@@ -328,6 +372,8 @@ class LearningService:
     # ---------- Detailed leaf tasks ----------
     def _flatten_bundle_tasks(self, node_id: int) -> list[dict]:
         bundle = self.get_node_bundle(node_id)
+        node = self.get_node(node_id)
+        hidden = LEGACY_REDUNDANT_TASKS.get(node["node_code"], set())
         output: list[dict] = []
         for group_index, group in enumerate(bundle.get("task_groups", [])):
             for item_index, item in enumerate(group.get("items", [])):
@@ -337,6 +383,7 @@ class LearningService:
                 task["group_description"] = group.get("description", "")
                 task["group_index"] = group_index
                 task["item_index"] = item_index
+                task["policy_hidden"] = task.get("id") in hidden
                 output.append(task)
         return output
 
@@ -355,6 +402,8 @@ class LearningService:
     def get_leaf_task_tree(self, node_id: int) -> list[dict]:
         self.ensure_leaf_task_rows(node_id)
         bundle = self.get_node_bundle(node_id)
+        node = self.get_node(node_id)
+        hidden = LEGACY_REDUNDANT_TASKS.get(node["node_code"], set())
         rows = self.db.conn.execute(
             "SELECT * FROM leaf_task_progress WHERE node_id=?", (node_id,)
         ).fetchall()
@@ -362,26 +411,31 @@ class LearningService:
         active = self.active_task_session()
         tree: list[dict] = []
         for group in bundle.get("task_groups", []):
+            visible_items = [item for item in group.get("items", []) if item.get("id") not in hidden]
+            if not visible_items:
+                continue
             g = {
                 "id": group.get("id"),
                 "title": group.get("title", ""),
                 "description": group.get("description", ""),
+                "assessment_required": bool(group.get("assessment_required", True)),
                 "items": [],
             }
-            for item in group.get("items", []):
+            for item in visible_items:
                 t = dict(item)
-                s = state.get(item["id"], {})
+                srow = state.get(item["id"], {})
                 t.update({
-                    "completed": bool(s.get("completed", 0)),
-                    "completed_at": s.get("completed_at"),
-                    "source_path": s.get("source_path", ""),
-                    "function_name": s.get("function_name", ""),
-                    "evidence_note": s.get("evidence_note", ""),
-                    "total_seconds": int(s.get("total_seconds", 0) or 0),
-                    "first_started_at": s.get("first_started_at"),
+                    "completed": bool(srow.get("completed", 0)),
+                    "completed_at": srow.get("completed_at"),
+                    "source_path": srow.get("source_path", ""),
+                    "function_name": srow.get("function_name", ""),
+                    "evidence_note": srow.get("evidence_note", ""),
+                    "total_seconds": int(srow.get("total_seconds", 0) or 0),
+                    "first_started_at": srow.get("first_started_at"),
                     "in_progress": bool(active and active["node_id"] == node_id and active["task_code"] == item["id"]),
                 })
                 g["items"].append(t)
+            g["assessment"] = self.get_section_assessment(node_id, str(g["id"]), tree_override=g)
             tree.append(g)
         return tree
 
@@ -468,25 +522,182 @@ class LearningService:
 
     def get_leaf_task_tree_no_ensure(self, node_id: int) -> list[dict]:
         bundle = self.get_node_bundle(node_id)
+        node = self.get_node(node_id)
+        hidden = LEGACY_REDUNDANT_TASKS.get(node["node_code"], set())
         rows = self.db.conn.execute("SELECT * FROM leaf_task_progress WHERE node_id=?", (node_id,)).fetchall()
         state = {r["task_code"]: dict(r) for r in rows}
         tree = []
         for group in bundle.get("task_groups", []):
-            g = {"id": group.get("id"), "title": group.get("title", ""), "description": group.get("description", ""), "items": []}
-            for item in group.get("items", []):
+            visible_items = [item for item in group.get("items", []) if item.get("id") not in hidden]
+            if not visible_items:
+                continue
+            g = {
+                "id": group.get("id"),
+                "title": group.get("title", ""),
+                "description": group.get("description", ""),
+                "assessment_required": bool(group.get("assessment_required", True)),
+                "items": [],
+            }
+            for item in visible_items:
                 t = dict(item)
-                s = state.get(item["id"], {})
+                srow = state.get(item["id"], {})
                 t.update({
-                    "completed": bool(s.get("completed", 0)),
-                    "completed_at": s.get("completed_at"),
-                    "source_path": s.get("source_path", ""),
-                    "function_name": s.get("function_name", ""),
-                    "evidence_note": s.get("evidence_note", ""),
-                    "total_seconds": int(s.get("total_seconds", 0) or 0),
+                    "completed": bool(srow.get("completed", 0)),
+                    "completed_at": srow.get("completed_at"),
+                    "source_path": srow.get("source_path", ""),
+                    "function_name": srow.get("function_name", ""),
+                    "evidence_note": srow.get("evidence_note", ""),
+                    "total_seconds": int(srow.get("total_seconds", 0) or 0),
+                })
+                g["items"].append(t)
+            g["assessment"] = self.get_section_assessment(node_id, str(g["id"]), tree_override=g)
+            tree.append(g)
+        return tree
+
+    # ---------- Section mastery checks ----------
+    @staticmethod
+    def _section_evidence_hash(group: dict) -> str:
+        payload = {
+            "group_id": group.get("id"),
+            "items": [
+                {
+                    "id": item.get("id"),
+                    "completed": bool(item.get("completed")),
+                    "source_path": str(item.get("source_path", "") or "").strip(),
+                    "function_name": str(item.get("function_name", "") or "").strip(),
+                    "evidence_note": str(item.get("evidence_note", "") or "").strip(),
+                }
+                for item in group.get("items", [])
+            ],
+        }
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
+
+    def get_section_group(self, node_id: int, group_id: str) -> dict:
+        for group in self.get_leaf_task_tree_no_ensure_without_assessment(node_id):
+            if str(group.get("id")) == str(group_id):
+                return group
+        raise KeyError(group_id)
+
+    def get_leaf_task_tree_no_ensure_without_assessment(self, node_id: int) -> list[dict]:
+        bundle = self.get_node_bundle(node_id)
+        node = self.get_node(node_id)
+        hidden = LEGACY_REDUNDANT_TASKS.get(node["node_code"], set())
+        rows = self.db.conn.execute("SELECT * FROM leaf_task_progress WHERE node_id=?", (node_id,)).fetchall()
+        state = {r["task_code"]: dict(r) for r in rows}
+        tree: list[dict] = []
+        for group in bundle.get("task_groups", []):
+            visible_items = [item for item in group.get("items", []) if item.get("id") not in hidden]
+            if not visible_items:
+                continue
+            g = {
+                "id": group.get("id"),
+                "title": group.get("title", ""),
+                "description": group.get("description", ""),
+                "assessment_required": bool(group.get("assessment_required", True)),
+                "items": [],
+            }
+            for item in visible_items:
+                t = dict(item)
+                srow = state.get(item["id"], {})
+                t.update({
+                    "completed": bool(srow.get("completed", 0)),
+                    "completed_at": srow.get("completed_at"),
+                    "source_path": srow.get("source_path", ""),
+                    "function_name": srow.get("function_name", ""),
+                    "evidence_note": srow.get("evidence_note", ""),
+                    "total_seconds": int(srow.get("total_seconds", 0) or 0),
                 })
                 g["items"].append(t)
             tree.append(g)
         return tree
+
+    def get_section_assessment(self, node_id: int, group_id: str, tree_override: dict | None = None) -> dict | None:
+        row = self.db.conn.execute(
+            "SELECT * FROM section_assessments WHERE node_id=? AND group_id=? ORDER BY attempt_no DESC LIMIT 1",
+            (node_id, group_id),
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        group = tree_override or next(
+            (g for g in self.get_leaf_task_tree_no_ensure_without_assessment(node_id) if str(g.get("id")) == str(group_id)),
+            None,
+        )
+        current_hash = self._section_evidence_hash(group) if group else ""
+        result["stale"] = bool(current_hash and current_hash != result.get("evidence_hash"))
+        result["passed"] = bool(result.get("passed")) and not result["stale"]
+        result["grade"] = json.loads(result.get("grade_json") or "{}")
+        return result
+
+    def save_section_assessment(self, node_id: int, group_id: str, grade: dict) -> dict:
+        group = self.get_section_group(node_id, group_id)
+        required = [item for item in group.get("items", []) if item.get("required", True)]
+        incomplete = [item.get("title", item.get("id")) for item in required if not item.get("completed")]
+        if incomplete:
+            raise ValueError("这个小节还有未完成叶子任务，不能进行小节验收：" + "、".join(map(str, incomplete[:5])))
+
+        raw_scores = grade.get("scores", {})
+        aliases = {
+            "understanding": ["understanding", "理解准确度"],
+            "evidence": ["evidence", "源码证据"],
+            "boundary": ["boundary", "边界判断"],
+            "completeness": ["completeness", "覆盖完整度"],
+        }
+        scores: dict[str, int] = {}
+        for key, names in aliases.items():
+            value = None
+            for name in names:
+                if name in raw_scores:
+                    value = raw_scores[name]
+                    break
+            if value is None:
+                raise ValueError(f"小节评分缺少：{names[-1]}")
+            ivalue = int(value)
+            if ivalue < 0 or ivalue > SECTION_SCORE_MAX[key]:
+                raise ValueError(f"{names[-1]} 必须在 0~{SECTION_SCORE_MAX[key]} 之间")
+            scores[key] = ivalue
+        total = sum(scores.values())
+        passed = total >= SECTION_PASS_SCORE
+        expected_node = str(grade.get("node_id", "")).strip()
+        expected_group = str(grade.get("section_id", grade.get("group_id", ""))).strip()
+        node = self.get_node(node_id)
+        if expected_node and expected_node != node["node_code"]:
+            raise ValueError("小节评分 node_id 与当前节点不一致")
+        if expected_group and expected_group != str(group_id):
+            raise ValueError("小节评分 section_id 与当前小节不一致")
+        attempt = self.db.conn.execute(
+            "SELECT COALESCE(MAX(attempt_no),0)+1 n FROM section_assessments WHERE node_id=? AND group_id=?",
+            (node_id, group_id),
+        ).fetchone()["n"]
+        evidence_hash = self._section_evidence_hash(group)
+        now = now_iso()
+        self.db.conn.execute(
+            """INSERT INTO section_assessments(
+                node_id,group_id,attempt_no,understanding,evidence,boundary,completeness,total,passed,evidence_hash,grade_json,created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                node_id, group_id, int(attempt), scores["understanding"], scores["evidence"], scores["boundary"],
+                scores["completeness"], total, 1 if passed else 0, evidence_hash,
+                json.dumps(grade, ensure_ascii=False), now,
+            ),
+        )
+        self.db.conn.commit()
+        return {"total": total, "passed": passed, "attempt_no": int(attempt), "stale": False}
+
+    def section_completion(self, node_id: int) -> tuple[int, int]:
+        groups = [g for g in self.get_leaf_task_tree(node_id) if g.get("assessment_required", True)]
+        total = len(groups)
+        passed = 0
+        for group in groups:
+            a = group.get("assessment")
+            if a and bool(a.get("passed")) and not bool(a.get("stale")):
+                passed += 1
+        return passed, total
+
+    def all_sections_passed(self, node_id: int) -> bool:
+        passed, total = self.section_completion(node_id)
+        return total == 0 or passed == total
 
     # ---------- Focus timer ----------
     def active_focus_session(self) -> dict | None:

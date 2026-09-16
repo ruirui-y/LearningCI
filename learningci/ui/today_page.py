@@ -3,14 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
     QAbstractItemView, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter,
-    QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QHeaderView
+    QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget, QHeaderView, QDialog
 )
 
 from learningci.ui.common import StatCard, format_duration, format_hours
-from learningci.ui.dialogs import AssessmentDialog
+from learningci.ui.dialogs import AssessmentDialog, JsonPasteDialog
+from learningci.core.prompt_builder import build_section_grade_prompt
 
 
 class TodayPage(QWidget):
@@ -23,9 +25,15 @@ class TodayPage(QWidget):
         self.service = service
         self.node: dict | None = None
         self.selected_task_code: str | None = None
+        self.selected_group_id: str | None = None
         self._refreshing_tree = False
+        self._loading_task_detail = False
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
+        self.autosave_timer = QTimer(self)
+        self.autosave_timer.setSingleShot(True)
+        self.autosave_timer.setInterval(450)
+        self.autosave_timer.timeout.connect(self._autosave_current)
         self._build_ui()
         self.refresh()
 
@@ -120,7 +128,7 @@ class TodayPage(QWidget):
         self.task_tree = QTreeWidget()
         self.task_tree.setObjectName("TaskTree")
         self.task_tree.setColumnCount(3)
-        self.task_tree.setHeaderLabels(["任务", "状态", "累计"])
+        self.task_tree.setHeaderLabels(["任务", "状态", "计时 / 小节分"])
         self.task_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.task_tree.setAlternatingRowColors(False)
         self.task_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -163,6 +171,32 @@ class TodayPage(QWidget):
         form.addRow("函数/入口", self.function_edit)
         form.addRow("证据备注", self.evidence_note_edit)
         detail_layout.addLayout(form)
+        self.autosave_status = QLabel("自动保存：已就绪")
+        self.autosave_status.setObjectName("Muted")
+        detail_layout.addWidget(self.autosave_status)
+
+        section_box = QFrame()
+        section_box.setObjectName("SectionAssessmentCard")
+        section_layout = QVBoxLayout(section_box)
+        section_layout.setContentsMargins(10, 10, 10, 10)
+        section_layout.setSpacing(6)
+        self.section_title_label = QLabel("小节验收")
+        self.section_title_label.setObjectName("SideCardTitle")
+        self.section_status_label = QLabel("完成当前小节叶子任务后，可直接把已有回答与证据交给 AI 打分；不再要求手工写一遍总结。")
+        self.section_status_label.setWordWrap(True)
+        self.section_status_label.setObjectName("Secondary")
+        section_btns = QHBoxLayout()
+        self.copy_section_grade_btn = QPushButton("复制小节验收内容")
+        self.copy_section_grade_btn.setObjectName("SecondaryButton")
+        self.paste_section_grade_btn = QPushButton("粘贴小节评分")
+        self.paste_section_grade_btn.setObjectName("PrimaryButton")
+        section_btns.addWidget(self.copy_section_grade_btn)
+        section_btns.addWidget(self.paste_section_grade_btn)
+        section_btns.addStretch(1)
+        section_layout.addWidget(self.section_title_label)
+        section_layout.addWidget(self.section_status_label)
+        section_layout.addLayout(section_btns)
+        detail_layout.addWidget(section_box)
 
         task_timer_row = QHBoxLayout()
         self.task_timer_label = QLabel("任务累计 00:00")
@@ -221,8 +255,14 @@ class TodayPage(QWidget):
         self.task_stop_btn.clicked.connect(self._stop_task)
         self.save_evidence_btn.clicked.connect(self._save_evidence)
         self.complete_task_btn.clicked.connect(self._toggle_selected_complete)
+        self.copy_section_grade_btn.clicked.connect(self._copy_section_grade)
+        self.paste_section_grade_btn.clicked.connect(self._paste_section_grade)
+        self.source_path_edit.textChanged.connect(self._evidence_edited)
+        self.function_edit.textChanged.connect(self._evidence_edited)
+        self.evidence_note_edit.textChanged.connect(self._evidence_edited)
 
     def refresh(self) -> None:
+        self.save_pending_edits()
         prev_task = self.selected_task_code
         self.node = self.service.get_active_node()
         self.selected_task_code = None
@@ -242,7 +282,11 @@ class TodayPage(QWidget):
         self.capability.setText(self.node["capability"])
         anchor = self.node.get("project_anchor", {})
         paths = anchor.get("paths", [])
-        if paths:
+        if self.node.get("node_code") == "NRPC-S0-01":
+            self.project_info.setText(
+                "本节点不再要求额外手写审计总结文档。掌握度由：叶子任务回答/源码证据 → 每小节 AI 验收 → 最终 Verification 判断。"
+            )
+        elif paths:
             rendered = "\n".join(f"  • NebulaRPC/{p}" for p in paths)
             self.project_info.setText("目标项目产物（不是 LearningCI/docs）：\n" + rendered)
         else:
@@ -282,7 +326,24 @@ class TodayPage(QWidget):
         for gi, group in enumerate(tree):
             done = sum(1 for x in group["items"] if x.get("completed"))
             total = len(group["items"])
-            parent = QTreeWidgetItem([group["title"], f"{done}/{total}", ""])
+            assessment = group.get("assessment")
+            if assessment and assessment.get("stale"):
+                section_state = "验收已过期"
+                section_score = f"{assessment.get('total', '-')}"
+            elif assessment and assessment.get("passed"):
+                section_state = "小节通过"
+                section_score = f"{assessment.get('total', '-')}分"
+            elif assessment:
+                section_state = "小节未通过"
+                section_score = f"{assessment.get('total', '-')}分"
+            elif done == total and total:
+                section_state = "待小节验收"
+                section_score = "未评分"
+            else:
+                section_state = "学习中"
+                section_score = "-"
+            parent = QTreeWidgetItem([group["title"], f"{done}/{total} · {section_state}", section_score])
+            parent.setData(0, Qt.ItemDataRole.UserRole + 1, str(group.get("id", "")))
             parent.setFlags(parent.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
             parent.setData(0, self.TASK_ROLE, None)
             self.task_tree.addTopLevelItem(parent)
@@ -312,12 +373,16 @@ class TodayPage(QWidget):
         code = items[0].data(0, self.TASK_ROLE)
         if not code:
             return
-        self.selected_task_code = str(code)
+        code = str(code)
+        if self.selected_task_code and self.selected_task_code != code:
+            self.save_pending_edits()
+        self.selected_task_code = code
         self._load_task_detail(self.selected_task_code)
 
     def _task_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
         if self._refreshing_tree or not self.node:
             return
+        self.save_pending_edits()
         code = item.data(0, self.TASK_ROLE)
         if not code:
             return
@@ -337,18 +402,47 @@ class TodayPage(QWidget):
         if not self.node:
             return
         task = self.service.get_leaf_task(self.node["id"], task_code)
-        self.detail_title.setText(task.get("title", task_code))
-        self.detail_purpose.setText(f"目的：{task.get('purpose', '')}")
-        estimate = int(task.get("estimated_minutes", 0) or 0)
-        self.detail_text.setText(f"操作：{task.get('detail', '')}\n预计：{estimate} min")
-        criteria = "\n".join(f"□ {x}" for x in task.get("done_when", []))
-        self.done_when.setText("完成标准：\n" + criteria)
-        self.source_path_edit.setText(str(task.get("source_path", "") or ""))
-        self.function_edit.setText(str(task.get("function_name", "") or ""))
-        self.evidence_note_edit.setPlainText(str(task.get("evidence_note", "") or ""))
-        self.task_timer_label.setText(f"任务累计 {format_duration(int(task.get('total_seconds', 0) or 0))}")
-        self.complete_task_btn.setText("取消完成" if bool(task.get("completed")) else "完成打卡")
+        self.selected_group_id = str(task.get("group_id", "")) or None
+        self._loading_task_detail = True
+        try:
+            self.detail_title.setText(task.get("title", task_code))
+            self.detail_purpose.setText(f"目的：{task.get('purpose', '')}")
+            estimate = int(task.get("estimated_minutes", 0) or 0)
+            self.detail_text.setText(f"操作：{task.get('detail', '')}\n预计：{estimate} min")
+            criteria = "\n".join(f"□ {x}" for x in task.get("done_when", []))
+            self.done_when.setText("完成标准：\n" + criteria)
+            self.source_path_edit.setText(str(task.get("source_path", "") or ""))
+            self.function_edit.setText(str(task.get("function_name", "") or ""))
+            self.evidence_note_edit.setPlainText(str(task.get("evidence_note", "") or ""))
+            self.task_timer_label.setText(f"任务累计 {format_duration(int(task.get('total_seconds', 0) or 0))}")
+            self.complete_task_btn.setText("取消完成" if bool(task.get("completed")) else "完成打卡")
+            self.autosave_status.setText("自动保存：已载入 SQLite")
+        finally:
+            self._loading_task_detail = False
+        self._refresh_section_assessment()
         self._refresh_task_buttons()
+
+    def _evidence_edited(self) -> None:
+        if self._loading_task_detail or not self.node or not self.selected_task_code:
+            return
+        self.autosave_status.setText("自动保存：等待写入…")
+        self.autosave_timer.start()
+
+    def _autosave_current(self) -> None:
+        if self._loading_task_detail or not self.node or not self.selected_task_code:
+            return
+        self._save_evidence(silent=True)
+        self.autosave_status.setText(f"自动保存：已保存 {datetime.now().strftime('%H:%M:%S')}")
+
+    def save_pending_edits(self) -> None:
+        if not hasattr(self, "autosave_timer"):
+            return
+        if self.autosave_timer.isActive():
+            self.autosave_timer.stop()
+        if self.node and self.selected_task_code and not self._loading_task_detail:
+            self._save_evidence(silent=True)
+            if hasattr(self, "autosave_status"):
+                self.autosave_status.setText(f"自动保存：已保存 {datetime.now().strftime('%H:%M:%S')}")
 
     def _save_evidence(self, silent: bool = False) -> None:
         if not self.node or not self.selected_task_code:
@@ -385,11 +479,90 @@ class TodayPage(QWidget):
         self.data_changed.emit()
 
     def _stop_task(self) -> None:
+        self.save_pending_edits()
         self.service.end_task_focus()
         self._populate_task_tree(self.selected_task_code)
         self._refresh_timer_state()
         self._refresh_metrics()
         self.data_changed.emit()
+
+    def _current_section_group(self) -> dict | None:
+        if not self.node or not self.selected_group_id:
+            return None
+        for group in self.service.get_leaf_task_tree(self.node["id"]):
+            if str(group.get("id")) == str(self.selected_group_id):
+                return group
+        return None
+
+    def _refresh_section_assessment(self) -> None:
+        group = self._current_section_group()
+        if not group:
+            self.section_title_label.setText("小节验收")
+            self.section_status_label.setText("请选择一个叶子任务。")
+            self.copy_section_grade_btn.setEnabled(False)
+            self.paste_section_grade_btn.setEnabled(False)
+            return
+        self.section_title_label.setText(f"小节验收 · {group.get('title', '')}")
+        required = [x for x in group.get("items", []) if x.get("required", True)]
+        done = sum(1 for x in required if x.get("completed"))
+        total = len(required)
+        assessment = group.get("assessment")
+        if assessment and assessment.get("stale"):
+            status = f"上次 {assessment.get('total', '-')} 分，但证据已修改，评分已失效，需要重新验收。"
+        elif assessment and assessment.get("passed"):
+            status = f"已通过 · {assessment.get('total', '-')} / 100 · 第 {assessment.get('attempt_no', '?')} 次验收"
+        elif assessment:
+            weaknesses = assessment.get("grade", {}).get("weaknesses", [])
+            extra = "；".join(str(x) for x in weaknesses[:2]) if weaknesses else "请根据薄弱点补充当前叶子任务证据。"
+            status = f"未通过 · {assessment.get('total', '-')} / 100 · {extra}"
+        elif done == total and total:
+            status = f"叶子任务 {done}/{total} 已完成。可直接把现有回答与证据交给 AI 评分，不需要再写总结。"
+        else:
+            status = f"叶子任务 {done}/{total}。全部完成后才能进行小节验收。"
+        self.section_status_label.setText(status)
+        ready = bool(total == 0 or done == total)
+        self.copy_section_grade_btn.setEnabled(ready)
+        self.paste_section_grade_btn.setEnabled(ready)
+
+    def _copy_section_grade(self) -> None:
+        if not self.node:
+            return
+        self.save_pending_edits()
+        group = self._current_section_group()
+        if not group:
+            return
+        required = [x for x in group.get("items", []) if x.get("required", True)]
+        incomplete = [x for x in required if not x.get("completed")]
+        if incomplete:
+            QMessageBox.warning(self, "小节任务未完成", f"还有 {len(incomplete)} 个叶子任务未完成，暂不能验收。")
+            return
+        prompt = build_section_grade_prompt(self.node, group)
+        QGuiApplication.clipboard().setText(prompt)
+        QMessageBox.information(
+            self, "小节验收内容已复制",
+            "直接粘贴给 ChatGPT。AI 只能根据你已经填写的叶子任务回答与证据评分，不需要你再写一份总结。",
+        )
+
+    def _paste_section_grade(self) -> None:
+        if not self.node or not self.selected_group_id:
+            return
+        self.save_pending_edits()
+        dlg = JsonPasteDialog("粘贴小节 AI 评分", self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            result = self.service.save_section_assessment(self.node["id"], self.selected_group_id, dlg.value())
+            if result["passed"]:
+                QMessageBox.information(self, "小节验收通过", f"本小节 {result['total']} / 100，通过。")
+            else:
+                QMessageBox.warning(self, "小节验收未通过", f"本小节 {result['total']} / 100，未达到 80 分。请补充或修正叶子任务回答/证据后重新验收。")
+            self._populate_task_tree(self.selected_task_code)
+            self._refresh_metrics()
+            self._refresh_timer_state()
+            self._refresh_section_assessment()
+            self.data_changed.emit()
+        except Exception as exc:
+            QMessageBox.critical(self, "小节评分 JSON 无效", str(exc))
 
     def _populate_paper_preview(self) -> None:
         if not self.node:
@@ -412,8 +585,9 @@ class TodayPage(QWidget):
         self.month_focus.set_value(format_hours(summary["month"]))
         if self.node:
             done, total, pct = self.service.task_completion(self.node["id"])
-            self.task_stat.set_value(f"{pct}%", f"必做任务 {done}/{total}")
-            self.task_count_label.setText(f"必做任务 {done} / {total}")
+            section_done, section_total = self.service.section_completion(self.node["id"])
+            self.task_stat.set_value(f"{pct}%", f"任务 {done}/{total} · 小节验收 {section_done}/{section_total}")
+            self.task_count_label.setText(f"必做任务 {done} / {total} · 小节验收 {section_done} / {section_total}")
             self.progress.setValue(pct)
             current = self.node.get("current_score")
             stable = self.node.get("stable_score")
@@ -429,6 +603,7 @@ class TodayPage(QWidget):
         self.data_changed.emit()
 
     def _stop_learning(self) -> None:
+        self.save_pending_edits()
         seconds = self.service.end_focus()
         if seconds <= 0:
             QMessageBox.information(self, "没有进行中的学习", "当前没有活动专注计时。")
@@ -453,7 +628,11 @@ class TodayPage(QWidget):
         self.stop_btn.setEnabled(running)
         if self.node is not None:
             done, total, _pct = self.service.task_completion(self.node["id"])
-            self.verify_btn.setEnabled((not running) and (not self.service.active_task_session()) and (total == 0 or done == total))
+            sections_ok = self.service.all_sections_passed(self.node["id"])
+            self.verify_btn.setEnabled(
+                (not running) and (not self.service.active_task_session())
+                and (total == 0 or done == total) and sections_ok
+            )
         else:
             self.verify_btn.setEnabled(False)
         if running or self.service.active_task_session():
@@ -481,6 +660,7 @@ class TodayPage(QWidget):
     def _open_verification(self) -> None:
         if not self.node:
             return
+        self.save_pending_edits()
         if self.service.active_focus_session() or self.service.active_task_session():
             QMessageBox.warning(self, "先结束学习", "结束当前专注/叶子任务计时后才能进入正式测试。")
             return
@@ -489,6 +669,14 @@ class TodayPage(QWidget):
             QMessageBox.warning(
                 self, "详细验收任务未完成",
                 f"当前仅完成 {done}/{total} 个必做叶子任务。固定试卷可以提前查看，但不能提前提交。",
+            )
+            return
+        section_done, section_total = self.service.section_completion(self.node["id"])
+        if section_done < section_total:
+            QMessageBox.warning(
+                self, "小节验收尚未全部通过",
+                f"当前仅通过 {section_done}/{section_total} 个小节验收。\n\n"
+                "每个小节完成后，直接把已有叶子任务回答与证据复制给 AI 打分，不需要重新写总结。",
             )
             return
         dlg = AssessmentDialog(self.service, self.node, parent=self)
