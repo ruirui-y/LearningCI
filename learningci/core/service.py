@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from learningci.config import (
-    DEFAULT_BUNDLE_DIR, REPO_ROOT, SYNC_DB_PATH,
+    DEFAULT_BUNDLE_DIR, MASTER_PLAN_PATH, REPO_ROOT, SYNC_DB_PATH,
 )
 from learningci.core.scoring import DEFAULT_MINIMUMS, evaluate_scores
 from learningci.core.bundle_loader import ensure_bundles_imported, validate_bundle
@@ -48,6 +49,54 @@ SECTION_SCORE_MAX = {
     "completeness": 10,
 }
 SECTION_PASS_SCORE = 80
+
+# 小节验收时，考官需要看到被冻结的架构路线，但学习者不需要在 10 分钟叶子任务里
+# 自己推断“未来该复用还是重做”。这些章节只作为边界判断的全局锚点；当前节点
+# 自己的 source_section 会另外自动加入。
+SECTION_EXAM_GLOBAL_ROUTE_REFS = ("5.1", "5.2", "5.3", "6")
+
+
+def _parse_source_section_refs(source_section: str) -> list[str]:
+    refs: list[str] = []
+    for ref in re.findall(r"§\s*(\d+(?:\.\d+)*)", str(source_section or "")):
+        if ref not in refs:
+            refs.append(ref)
+    return refs
+
+
+def _extract_markdown_numbered_section(markdown: str, ref: str) -> dict | None:
+    """Extract one numbered Markdown section such as §4.1 or §7.
+
+    The section ends at the next heading with the same or a higher hierarchy level.
+    This keeps the prompt grounded in the frozen Master Plan without dumping the whole file.
+    """
+    lines = markdown.splitlines()
+    pattern = re.compile(
+        rf"^(?P<hashes>#{{1,6}})\s+{re.escape(str(ref))}(?=\s|[.：:、])(?P<title>.*)$"
+    )
+    start = None
+    level = None
+    title = ""
+    for idx, line in enumerate(lines):
+        match = pattern.match(line.strip())
+        if match:
+            start = idx
+            level = len(match.group("hashes"))
+            title = line.lstrip("#").strip()
+            break
+    if start is None or level is None:
+        return None
+
+    end = len(lines)
+    heading = re.compile(r"^(?P<hashes>#{1,6})\s+")
+    for idx in range(start + 1, len(lines)):
+        match = heading.match(lines[idx].strip())
+        if match and len(match.group("hashes")) <= level:
+            end = idx
+            break
+
+    text = "\n".join(lines[start:end]).strip()
+    return {"ref": str(ref), "title": title, "text": text}
 
 
 class LearningService:
@@ -578,6 +627,68 @@ class LearningService:
             if str(group.get("id")) == str(group_id):
                 return group
         raise KeyError(group_id)
+
+    def get_section_exam_context(self, node_id: int) -> dict:
+        """Return frozen route context for an AI section examiner.
+
+        The learner only supplies current leaf-task facts/evidence. Reuse/rebuild decisions are
+        made by the examiner from this frozen context, so the learner is not forced to plan future
+        NebulaRPC stages while working on a short task.
+        """
+        node = self.get_node(node_id)
+        bundle = self.get_node_bundle(node_id)
+        source_section = str(bundle.get("source_section", "") or "")
+
+        plan_row = self.db.conn.execute(
+            "SELECT name,version FROM plans WHERE id=?", (node["plan_id"],)
+        ).fetchone()
+        plan_info = dict(plan_row) if plan_row else {}
+
+        refs = _parse_source_section_refs(source_section)
+        for ref in SECTION_EXAM_GLOBAL_ROUTE_REFS:
+            if ref not in refs:
+                refs.append(ref)
+
+        excerpts: list[dict] = []
+        if MASTER_PLAN_PATH.exists():
+            master_plan = MASTER_PLAN_PATH.read_text(encoding="utf-8")
+            for ref in refs:
+                section = _extract_markdown_numbered_section(master_plan, ref)
+                if section:
+                    excerpts.append(section)
+
+        nearby_rows = self.db.conn.execute(
+            """SELECT node_code,stage,order_index,title,capability,priority,status
+               FROM nodes
+               WHERE plan_id=? AND order_index BETWEEN ? AND ?
+               ORDER BY order_index""",
+            (node["plan_id"], max(1, int(node["order_index"]) - 1), int(node["order_index"]) + 3),
+        ).fetchall()
+        nearby = [dict(row) for row in nearby_rows]
+
+        return {
+            "plan": {
+                "name": plan_info.get("name", "NebulaRPC"),
+                "version": plan_info.get("version", ""),
+                "master_plan": str(MASTER_PLAN_PATH),
+            },
+            "current_node": {
+                "node_id": node["node_code"],
+                "stage": node["stage"],
+                "title": node["title"],
+                "capability": node["capability"],
+                "must_learn": node.get("must_learn", []),
+                "out_of_scope": node.get("out_of_scope", []),
+                "source_section": source_section,
+            },
+            "nearby_mainline": nearby,
+            "master_plan_excerpts": excerpts,
+            "boundary_policy": (
+                "学习者只负责证明当前叶子任务中的技术事实与工程证据。"
+                "哪些能力在 NebulaRPC 中复用、最小恢复、重新验证或重做，由考官依据冻结路线判断；"
+                "不得因为学习者没有主动规划未来阶段而扣边界判断分。"
+            ),
+        }
 
     def get_leaf_task_tree_no_ensure_without_assessment(self, node_id: int) -> list[dict]:
         bundle = self.get_node_bundle(node_id)

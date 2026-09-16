@@ -113,7 +113,7 @@ def build_grade_prompt(node: dict, test_json: dict, answers: dict[str, str] | st
 """
 
 
-def build_section_grade_prompt(node: dict, group: dict) -> str:
+def build_section_grade_prompt(node: dict, group: dict, route_context: dict | None = None) -> str:
     """Build a strict, no-API prompt that grades one task section from existing leaf evidence.
 
     The user should not have to write another summary. The examiner must judge mastery only from
@@ -131,6 +131,45 @@ def build_section_grade_prompt(node: dict, group: dict) -> str:
         f"小节 ID：{group.get('id')}",
         f"小节名称：{group.get('title')}",
         f"小节说明：{group.get('description', '')}",
+    ]
+
+    if route_context:
+        current = route_context.get("current_node", {}) or {}
+        lines.extend([
+            "",
+            "冻结路线上下文（仅供考官做复用/恢复/重做边界判断，不是要求学习者额外回答）：",
+            f"路线：{route_context.get('plan', {}).get('name', 'NebulaRPC')} {route_context.get('plan', {}).get('version', '')}",
+            f"当前 Stage：{current.get('stage', node.get('stage', ''))}",
+            "当前节点必须掌握：" + _pretty(current.get("must_learn", node.get("must_learn", []))),
+            "当前节点明确不做：" + _pretty(current.get("out_of_scope", node.get("out_of_scope", []))),
+            f"节点来源章节：{current.get('source_section', '')}",
+            "",
+            "相邻主线节点（仅帮助你理解当前能力在整条路线中的位置）：",
+        ])
+        for nearby in route_context.get("nearby_mainline", []):
+            marker = " ← 当前" if str(nearby.get("node_code")) == str(node.get("node_code")) else ""
+            lines.append(
+                f"- {nearby.get('node_code')} / Stage {nearby.get('stage')} / {nearby.get('title')}："
+                f"{nearby.get('capability')}{marker}"
+            )
+        excerpts = route_context.get("master_plan_excerpts", []) or []
+        if excerpts:
+            lines.extend(["", "Master Plan 相关冻结原文："] )
+            for excerpt in excerpts:
+                lines.extend([
+                    f"\n【§{excerpt.get('ref')} · {excerpt.get('title', '')}】",
+                    str(excerpt.get("text", "")).strip(),
+                ])
+        lines.extend([
+            "",
+            "边界判断责任：",
+            "- 学习者只负责当前叶子任务里的技术事实、源码位置、调用链、实验/日志等工程证据。",
+            "- 你负责结合上述冻结路线判断这些已证明能力在 NebulaRPC 中应复用、最小恢复、重新验证还是确实需要重做。",
+            "- 不得因为学习者没有主动规划未来 Stage、没有主动写“哪些该复用”而扣边界判断分。",
+            "- 只有当叶子证据不足以支撑某个复用/恢复结论，或者叶子结论与冻结路线冲突时，才在边界判断维度扣分。",
+        ])
+
+    lines.extend([
         "",
         "评分结构固定为：",
         "- 理解准确度：35",
@@ -145,12 +184,13 @@ def build_section_grade_prompt(node: dict, group: dict) -> str:
         "3. 源码路径、函数名、调用链、测试/日志等证据不充分时必须扣分。",
         "4. 如果结论存在明显错误，即使任务全部勾选，也必须扣分并指出具体任务。",
         "5. 不扩展到本节点 out_of_scope，不提供新的学习路线。",
-        "6. 每个扣分点单独写入 issues；能定位到叶子任务时必须填写 task_id，dimension 只能是理解准确度/源码证据/边界判断/覆盖完整度之一。",
-        "7. issues.title 写一句短标题，issues.detail 说明具体错在哪里或缺什么证据；severity 只能是 error/warning/info；不要把多个问题揉成一条。",
-        "8. 只返回纯 JSON，不要 Markdown fence，不要附加解释。",
+        "6. 边界判断由考官结合冻结路线上下文完成；不得因为学习者没有主动规划 NebulaRPC 后续实现、没有主动写复用结论而扣分。只有现有工程证据不足以支持路线中的复用/恢复边界，或与冻结路线冲突时，才扣边界判断分。",
+        "7. 每个扣分点单独写入 issues；能定位到叶子任务时必须填写 task_id，dimension 只能是理解准确度/源码证据/边界判断/覆盖完整度之一。",
+        "8. issues.title 写一句短标题，issues.detail 说明具体错在哪里或缺什么证据；severity 只能是 error/warning/info；不要把多个问题揉成一条。",
+        "9. 只返回纯 JSON，不要 Markdown fence，不要附加解释。",
         "",
         "当前小节叶子任务记录：",
-    ]
+    ])
     for idx, item in enumerate(group.get("items", []), start=1):
         lines.extend([
             f"\n[{idx}] {item.get('title', '')}",

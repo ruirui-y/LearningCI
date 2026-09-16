@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         side.setSpacing(6)
         title = QLabel("LearningCI")
         title.setObjectName("AppTitle")
-        sub = QLabel("能力验证系统 · v0.3.4")
+        sub = QLabel("能力验证系统 · v0.3.5")
         sub.setObjectName("AppSub")
         side.addWidget(title)
         side.addWidget(sub)

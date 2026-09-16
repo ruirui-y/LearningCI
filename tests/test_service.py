@@ -51,6 +51,22 @@ class ServiceTests(unittest.TestCase):
         self.assertGreater(pct, 0)
 
 
+    def test_section_exam_context_uses_master_plan_and_node_boundaries(self):
+        node = self.service.get_active_node()
+        context = self.service.get_section_exam_context(node["id"])
+        self.assertEqual(context["current_node"]["node_id"], "NRPC-S0-01")
+        self.assertIn("重新实现 Reactor", context["current_node"]["out_of_scope"])
+        refs = {item["ref"] for item in context["master_plan_excerpts"]}
+        self.assertIn("4.1", refs)
+        self.assertIn("5.1", refs)
+        self.assertIn("5.2", refs)
+        self.assertIn("5.3", refs)
+        text = "\n".join(item["text"] for item in context["master_plan_excerpts"])
+        self.assertIn("MyMuduo 已经证明的能力", text)
+        self.assertIn("不复制整个 MyMuduo", text)
+        self.assertIn("Recovery Zone", text)
+        self.assertIn("不得因为学习者没有主动规划未来阶段而扣边界判断分", context["boundary_policy"])
+
     def test_section_assessment_uses_leaf_evidence_and_invalidates_on_edit(self):
         node = self.service.get_active_node()
         group = self.service.get_leaf_task_tree(node["id"])[0]

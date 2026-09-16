@@ -68,6 +68,39 @@ class SectionFeedbackTests(unittest.TestCase):
         self.assertIn('"dimension"', prompt)
         self.assertIn('"detail"', prompt)
 
+    def test_section_prompt_includes_frozen_route_context(self):
+        node = {
+            "node_code": "NRPC-S0-01",
+            "title": "MyMuduo 历史能力审计",
+            "capability": "确认历史能力边界",
+            "stage": "0",
+        }
+        group = {"id": "eventloop", "title": "EventLoop", "description": "", "items": []}
+        route_context = {
+            "plan": {"name": "NebulaRPC", "version": "test"},
+            "current_node": {
+                "stage": "0",
+                "must_learn": ["Reactor 已有能力边界"],
+                "out_of_scope": ["重新实现 Reactor"],
+                "source_section": "§4.1 / §7",
+            },
+            "nearby_mainline": [
+                {
+                    "node_code": "NRPC-S0-01", "stage": "0", "title": "MyMuduo 历史能力审计",
+                    "capability": "确认历史能力边界",
+                }
+            ],
+            "master_plan_excerpts": [
+                {"ref": "4.1", "title": "4.1 MyMuduo 已经证明的能力", "text": "NebulaRPC 不再把手写完整 muduo 当成主要学习目标。"}
+            ],
+        }
+        prompt = build_section_grade_prompt(node, group, route_context)
+        self.assertIn("冻结路线上下文", prompt)
+        self.assertIn("重新实现 Reactor", prompt)
+        self.assertIn("MyMuduo 已经证明的能力", prompt)
+        self.assertIn("不得因为学习者没有主动规划", prompt)
+        self.assertIn("边界判断由考官结合冻结路线上下文完成", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -227,8 +227,8 @@ class TodayPage(QWidget):
         self.section_issue_scroll.setWidgetResizable(True)
         self.section_issue_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.section_issue_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.section_issue_scroll.setMinimumHeight(220)
-        self.section_issue_scroll.setMaximumHeight(420)
+        self.section_issue_scroll.setMinimumHeight(130)
+        self.section_issue_scroll.setMaximumHeight(290)
         issue_body = QWidget()
         self.section_issue_layout = QVBoxLayout(issue_body)
         self.section_issue_layout.setContentsMargins(2, 2, 4, 2)
@@ -746,11 +746,12 @@ class TodayPage(QWidget):
         if incomplete:
             QMessageBox.warning(self, "小节任务未完成", f"还有 {len(incomplete)} 个叶子任务未完成，暂不能验收。")
             return
-        prompt = build_section_grade_prompt(self.node, group)
+        route_context = self.service.get_section_exam_context(self.node["id"])
+        prompt = build_section_grade_prompt(self.node, group, route_context)
         QGuiApplication.clipboard().setText(prompt)
         QMessageBox.information(
             self, "小节验收内容已复制",
-            "直接粘贴给 ChatGPT。AI 只能根据你已经填写的叶子任务回答与证据评分，不需要你再写一份总结。",
+            "直接粘贴给 ChatGPT。已自动附带冻结路线相关上下文；你只负责当前叶子任务证据，复用/重做边界由考官结合总路线判断。",
         )
 
     def _paste_section_grade(self) -> None:
