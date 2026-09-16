@@ -1,0 +1,42 @@
+{
+  "id": "NET-TCP-STREAM-001",
+  "name": "TCP 字节流与消息边界",
+  "domain": "Network/TCP",
+  "priority": "CORE",
+  "status": "READY",
+  "estimated_hours": 6,
+  "prerequisites": [
+    "NET-SOCKET-BASIC-001"
+  ],
+  "capability_definition": "在不查资料的情况下，我能够解释 TCP 字节流语义，预测 send/recv 行为，独立实现 length-prefix framing，并诊断半包、粘包和恶意长度问题。",
+  "must_learn": [
+    "TCP 字节流",
+    "send/recv 边界",
+    "半包",
+    "多帧合并",
+    "length-prefix framing"
+  ],
+  "out_of_scope": [
+    "拥塞控制",
+    "重传算法",
+    "TLS"
+  ],
+  "project_anchor": {
+    "project": "Reference C++ Server",
+    "module": "protocol",
+    "artifacts": [
+      "FrameDecoder",
+      "FrameEncoder",
+      "randomized tests"
+    ]
+  },
+  "scoring": {
+    "explanation": 0,
+    "prediction": 0,
+    "implementation": 0,
+    "diagnosis": 0,
+    "transfer": 0
+  },
+  "retest_7d": null,
+  "retest_30d": null
+}
