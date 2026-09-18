@@ -11,7 +11,7 @@ from typing import Any
 from learningci.config import (
     DEFAULT_BUNDLE_DIR, MASTER_PLAN_PATH, REPO_ROOT, SYNC_DB_PATH,
 )
-from learningci.core.scoring import DEFAULT_MINIMUMS, evaluate_scores
+from learningci.core.scoring import DEFAULT_MINIMUMS, ROUTE_PASS_SCORE, evaluate_scores
 from learningci.core.bundle_loader import ensure_bundles_imported, validate_bundle
 from learningci.core.refinement_bridge import (
     backup_bundle_file, export_refinement_package as build_refinement_zip,
@@ -55,6 +55,148 @@ SECTION_PASS_SCORE = 80
 # 自己的 source_section 会另外自动加入。
 SECTION_EXAM_GLOBAL_ROUTE_REFS = ("5.1", "5.2", "5.3", "6")
 
+# v0.3.9: 历史审计节点正式验收去重继续保留；正式测试 FAIL 后新增结构化修正反馈。
+# 学习者只证明“源码里有什么、怎么工作、证据在哪里”；是否复用/恢复/重做由 Reviewer
+# 结合冻结 Master Plan 判断。旧试卷中把未来架构决策塞回学习者答案的题目在运行时被新版本取代，
+# 不改 plan.json，也不直接改已经冻结的执行包文件。
+HISTORY_AUDIT_NODE_CODES = {"NRPC-S0-01", "NRPC-S0-02"}
+
+
+def _history_audit_paper_override(node_code: str) -> dict | None:
+    if node_code == "NRPC-S0-01":
+        return {
+            "paper_id": "NRPC-S0-01-V1.3",
+            "version": 4,
+            "visible_from_start": True,
+            "frozen": True,
+            "supersedes": ["NRPC-S0-01-V1", "NRPC-S0-01-V1.1", "NRPC-S0-01-V1.2"],
+            "revision_reason": (
+                "历史审计正式验收去重：叶子阶段负责采集源码证据，正式测试只考脱离材料后的机制解释、预测、"
+                "诊断和迁移；implementation 由 LearningCI 自动附带既有工程证据供 Reviewer 复核。"
+            ),
+            "questions": [
+                {
+                    "id": "q1",
+                    "dimension": "explanation",
+                    "max_score": 15,
+                    "question": (
+                        "用自己的话说明四组已经审计过的对象怎样协作："
+                        "① EventLoop / Poller / Channel；② Connector / TcpClient / TcpConnection；"
+                        "③ Send / output_buffer / EPOLLOUT / HandleWrite；④ Channel tie/guard / TcpConnection 生命周期。"
+                        "重点写对象职责、关键状态变化和因果关系。不要重新抄源码路径、行号或代码；"
+                        "如果机制漏掉关键一步，Reviewer 直接针对该机制批注。"
+                    ),
+                },
+                {
+                    "id": "q2",
+                    "dimension": "prediction",
+                    "max_score": 15,
+                    "question": (
+                        "假设 TcpConnection 已建立：业务线程连续提交多个 Send，其中一次首次非阻塞 write 只写出部分数据，"
+                        "且 output_buffer 尚未清空时对端关闭连接。禁止运行程序，预测跨线程发送怎样进入 owner loop、"
+                        "剩余 bytes 去哪里、什么条件让发送继续、EPOLLOUT 何时停止关注，以及 close 到来后连接清理如何推进。"
+                        "只写预测和原因，不要求重新抄源码路径。"
+                    ),
+                },
+                {
+                    "id": "q3",
+                    "dimension": "implementation",
+                    "max_score": 25,
+                    "requires_answer": False,
+                    "question": (
+                        "系统自动复核项：LearningCI 会把本节点已经保存并通过小节验收的叶子任务工程证据自动附到评分提示词中，"
+                        "Reviewer 直接检查这些路径、函数、调用链和证据备注能否支撑真实实现结论。学习者无需再次作答或重新整理证据。"
+                    ),
+                },
+                {
+                    "id": "q4",
+                    "dimension": "diagnosis",
+                    "max_score": 25,
+                    "question": (
+                        "具体故障诊断：假设有人修改 Connector 的连接完成处理逻辑，只要收到 EPOLLOUT 就直接当作连接成功并把 fd "
+                        "交给 TcpClient，不再检查 SO_ERROR。此时目标端口拒绝连接。根据你已经审计过的机制说明：程序会在哪一步做出错误判断、"
+                        "上层可能看到什么错误现象、根因是什么、原实现为什么能够避免这个误判。只做因果诊断，不要求重新贴源码路径或写审计报告。"
+                    ),
+                },
+                {
+                    "id": "q5",
+                    "dimension": "transfer",
+                    "max_score": 20,
+                    "question": (
+                        "假设有人对这套网络代码做以下修改：① foreign thread 直接执行 SendInLoop；"
+                        "② partial write 后丢弃剩余 bytes；③ output_buffer 清空后仍持续关注 EPOLLOUT；"
+                        "④ Channel 回调期间去掉 tie/guard 保活。任选三项，判断会破坏什么行为以及为什么。"
+                        "不要求重新抄源码路径，只考你能否把已经掌握的机制迁移到这个变化场景。"
+                    ),
+                },
+            ],
+        }
+
+    if node_code == "NRPC-S0-02":
+        return {
+            "paper_id": "NRPC-S0-02-V1.2",
+            "version": 3,
+            "visible_from_start": True,
+            "frozen": True,
+            "supersedes": ["NRPC-S0-02-V1", "NRPC-S0-02-V1.1"],
+            "revision_reason": (
+                "历史审计正式验收去重：旧 RPC 的源码证据只在叶子阶段采集一次，正式测试不再要求重复整理；"
+                "implementation 由 LearningCI 自动附带已有证据。"
+            ),
+            "questions": [
+                {
+                    "id": "q1",
+                    "dimension": "explanation",
+                    "max_score": 15,
+                    "question": (
+                        "用自己的话解释旧 RPC 从调用发起到响应完成时，RequestId/seq_id、PendingCall、promise/future、"
+                        "ReceiverThread、RpcHeader/Protobuf 分别承担什么职责，以及它们怎样串起来。"
+                        "重点写机制和因果关系，不要求重新抄源码路径、行号或代码，也不要求设计新的 Async RPC。"
+                    ),
+                },
+                {
+                    "id": "q2",
+                    "dimension": "prediction",
+                    "max_score": 15,
+                    "question": (
+                        "两个 RPC 请求几乎同时发出，服务端响应顺序与请求顺序相反，其中一个调用在响应到达前发生 wait_for 超时。"
+                        "禁止运行程序，预测 seq_id、PendingCall、ReceiverThread、promise/future 会怎样变化，迟到响应到来时会经过什么查找/完成逻辑。"
+                        "只写预测和原因，不要求重新抄源码路径。"
+                    ),
+                },
+                {
+                    "id": "q3",
+                    "dimension": "implementation",
+                    "max_score": 25,
+                    "requires_answer": False,
+                    "question": (
+                        "系统自动复核项：LearningCI 自动附带本节点已经保存并通过小节验收的旧 RPC 工程证据，Reviewer 直接检查其真实性和闭环程度。"
+                        "学习者无需再次整理源码路径、函数和调用链。"
+                    ),
+                },
+                {
+                    "id": "q4",
+                    "dimension": "diagnosis",
+                    "max_score": 25,
+                    "question": (
+                        "具体故障诊断：假设某个调用已经 wait_for 超时并结束等待，随后该请求的响应才被 ReceiverThread 收到。"
+                        "根据你审计过的旧实现说明迟到响应会尝试经过哪些状态/查找关系、哪里可能失效或被忽略、根因是什么，"
+                        "以及当前旧实现实际如何处理。不要重新写审计报告，也不要设计新的 Async RPC。"
+                    ),
+                },
+                {
+                    "id": "q5",
+                    "dimension": "transfer",
+                    "max_score": 20,
+                    "question": (
+                        "假设对旧 RPC 做以下变化：① 两个并发请求的响应乱序返回；② 两个请求错误复用了同一个 RequestId；"
+                        "③ ReceiverThread 暂停消费响应；④ PendingCall 在响应到来前被移除。任选三项，判断首先会破坏哪个状态或查找关系以及为什么。"
+                        "只考当前同步 RPC 模型内的机制迁移，不进入后续阶段设计。"
+                    ),
+                },
+            ],
+        }
+    return None
 
 def _parse_source_section_refs(source_section: str) -> list[str]:
     refs: list[str] = []
@@ -102,6 +244,78 @@ def _extract_markdown_numbered_section(markdown: str, ref: str) -> dict | None:
 class LearningService:
     def __init__(self, db: Database):
         self.db = db
+        # v0.3.11: older builds used 80 + per-dimension hard gates for mainline
+        # progression. Reconcile existing 70+ initial verification scores once so
+        # upgrading the app immediately unlocks the next node without forcing the
+        # learner to paste the same grade again.
+        self._reconcile_relaxed_verification_gate()
+
+    def _reconcile_relaxed_verification_gate(self) -> None:
+        rows = self.db.conn.execute(
+            """SELECT s.id AS score_id,s.node_id,s.attempt_id,s.total,s.created_at
+               FROM score_records s
+               JOIN attempts a ON a.id=s.attempt_id
+               WHERE a.review_id IS NULL
+                 AND a.attempt_kind='VERIFICATION'
+                 AND s.passed=0
+                 AND s.total>=?
+               ORDER BY s.node_id,s.created_at,s.id""",
+            (ROUTE_PASS_SCORE,),
+        ).fetchall()
+        if not rows:
+            return
+
+        touched: set[int] = set()
+        now = now_iso()
+        with self.db.transaction() as conn:
+            for row in rows:
+                node_id = int(row["node_id"])
+                touched.add(node_id)
+                conn.execute("UPDATE score_records SET passed=1 WHERE id=?", (int(row["score_id"]),))
+                conn.execute(
+                    "UPDATE attempts SET status='PASSED', graded_at=COALESCE(graded_at,?) WHERE id=?",
+                    (now, int(row["attempt_id"])),
+                )
+
+            for node_id in touched:
+                first = conn.execute(
+                    """SELECT s.id,s.total,s.created_at
+                       FROM score_records s
+                       JOIN attempts a ON a.id=s.attempt_id
+                       WHERE s.node_id=? AND a.review_id IS NULL
+                         AND a.attempt_kind='VERIFICATION' AND s.passed=1
+                       ORDER BY s.created_at,s.id LIMIT 1""",
+                    (node_id,),
+                ).fetchone()
+                latest = conn.execute(
+                    """SELECT s.id,s.total,s.created_at
+                       FROM score_records s
+                       JOIN attempts a ON a.id=s.attempt_id
+                       WHERE s.node_id=? AND a.review_id IS NULL
+                         AND a.attempt_kind='VERIFICATION' AND s.passed=1
+                       ORDER BY s.created_at DESC,s.id DESC LIMIT 1""",
+                    (node_id,),
+                ).fetchone()
+                if not first or not latest:
+                    continue
+                node_row = conn.execute(
+                    "SELECT status,first_pass_at FROM nodes WHERE id=?", (node_id,)
+                ).fetchone()
+                first_pass_at = node_row["first_pass_at"] or first["created_at"]
+                conn.execute(
+                    "UPDATE nodes SET status='PASSED',first_pass_at=?,updated_at=? WHERE id=?",
+                    (first_pass_at, now, node_id),
+                )
+                # If this node was trapped by the old hard gate, it never received
+                # delayed reviews. Schedule them now from the qualifying score.
+                pending = conn.execute(
+                    "SELECT 1 FROM reviews WHERE node_id=? LIMIT 1", (node_id,)
+                ).fetchone()
+                if not pending:
+                    self._schedule_reviews(conn, node_id, int(latest["total"]), int(latest["id"]), now)
+
+        for node_id in touched:
+            self._refresh_node_scores(node_id)
 
     # ---------- Plan / nodes ----------
     def list_nodes(self) -> list[dict]:
@@ -364,22 +578,14 @@ class LearningService:
             raise RuntimeError("当前节点没有固定 Verification 试卷")
         data = json.loads(row["paper_json"])
         node = self.get_node(node_id)
-        # v0.3.2 methodology correction: S0-01 no longer asks the learner to manually rewrite
-        # MYMUDUO_AUDIT.md after every leaf answer. Section mastery is graded directly from
-        # the collected leaf evidence. The formal implementation question therefore also uses
-        # those existing records instead of demanding a duplicate audit document.
-        if node["node_code"] == "NRPC-S0-01":
-            for q in data.get("questions", []):
-                if q.get("dimension") == "implementation":
-                    q["question"] = (
-                        "不额外撰写审计总结文档。直接基于 LearningCI 已保存的叶子任务回答与工程证据，"
-                        "选择 EventLoop、TcpConnection、Connector/TcpClient、Buffer 中至少四条关键结论进行可复核证明。"
-                        "每条必须给出真实源码路径、函数/入口和你在叶子任务中记录的调用链或观察证据，并明确该结论说明 MyMuduo 已经解决了什么、"
-                        "还有什么边界。不得只说‘任务已完成’，也不得重新实现 Reactor。"
-                    )
-                    break
-            data["paper_id"] = "NRPC-S0-01-V1.1"
-            data["version"] = 2
+
+        # 方法论兼容层：冻结执行包保持原样，但历史审计节点的旧正式试卷若把未来架构
+        # 决策责任压给学习者，则在运行时使用已批准的新版本试卷。这样不会触碰已冻结
+        # 路线/执行包，也能让已有 SQLite 在升级后立即使用正确职责边界。
+        override = _history_audit_paper_override(node["node_code"])
+        if override is not None:
+            data = override
+
         data["_paper_hash"] = row["paper_hash"]
         data["_paper_code"] = data.get("paper_id", row["paper_code"])
         return data
@@ -810,6 +1016,61 @@ class LearningService:
         passed, total = self.section_completion(node_id)
         return total == 0 or passed == total
 
+    def get_verification_evidence_context(self, node_id: int) -> dict:
+        """Return already-saved engineering evidence for formal history-audit grading.
+
+        Leaf tasks are the evidence-collection phase. Formal Verification must not force the
+        learner to re-copy paths/functions/call chains. The Reviewer receives this context
+        automatically and uses it mainly for the implementation dimension and for checking
+        mechanism answers against previously verified source evidence.
+        """
+        node = self.get_node(node_id)
+        groups: list[dict] = []
+        for group in self.get_leaf_task_tree(node_id):
+            items: list[dict] = []
+            for item in group.get("items", []):
+                if not item.get("completed"):
+                    continue
+                source_path = str(item.get("source_path", "") or "").strip()
+                function_name = str(item.get("function_name", "") or "").strip()
+                evidence_note = str(item.get("evidence_note", "") or "").strip()
+                if not (source_path or function_name or evidence_note):
+                    continue
+                items.append({
+                    "task_id": item.get("id"),
+                    "title": item.get("title", ""),
+                    "source_path": source_path,
+                    "function_name": function_name,
+                    "evidence_note": evidence_note,
+                })
+
+            if not items:
+                continue
+
+            assessment = group.get("assessment") or {}
+            grade = assessment.get("grade") or {}
+            groups.append({
+                "section_id": group.get("id"),
+                "section_title": group.get("title", ""),
+                "section_assessment": {
+                    "passed": bool(assessment.get("passed")),
+                    "stale": bool(assessment.get("stale")),
+                    "total": assessment.get("total"),
+                    "scores": grade.get("scores", {}),
+                },
+                "leaf_evidence": items,
+            })
+
+        return {
+            "node_id": node["node_code"],
+            "source": "LearningCI 已保存叶子任务证据与小节验收结果",
+            "policy": (
+                "这些证据由系统自动附带。学习者不需要在正式测试中重新抄写。"
+                "implementation 直接依据这些工程证据评分；其他维度可用这些证据核对技术回答，但不得因未重复写路径而扣分。"
+            ),
+            "groups": groups,
+        }
+
     # ---------- Focus timer ----------
     def active_focus_session(self) -> dict | None:
         row = self.db.conn.execute(
@@ -949,16 +1210,31 @@ class LearningService:
         return int(cur.lastrowid)
 
     def ensure_verification_attempt(self, node_id: int) -> int:
+        # 先解析当前生效试卷。方法论修订可能在不改冻结 bundle 的前提下 supersede 旧试卷。
+        paper = self.get_frozen_verification_paper(node_id)
+        clean = {k: v for k, v in paper.items() if not k.startswith("_")}
+
         row = self.db.conn.execute(
-            """SELECT id,status FROM attempts
+            """SELECT id,status,test_json FROM attempts
                WHERE node_id=? AND review_id IS NULL AND attempt_kind='VERIFICATION'
                ORDER BY id DESC LIMIT 1""",
             (node_id,),
         ).fetchone()
         if row and row["status"] == "OPEN":
-            return int(row["id"])
-        paper = self.get_frozen_verification_paper(node_id)
-        clean = {k: v for k, v in paper.items() if not k.startswith("_")}
+            try:
+                open_test = json.loads(row["test_json"])
+            except json.JSONDecodeError:
+                open_test = None
+            if open_test == clean:
+                return int(row["id"])
+
+            # 旧试卷尚未评分时只作废草稿，不生成 FAIL/score_record。历史回答仍保留在 SQLite
+            # 里供追溯，但不会继续作为当前正式测试打开。
+            self.db.conn.execute(
+                "UPDATE attempts SET status='SUPERSEDED' WHERE id=?", (int(row["id"]),)
+            )
+            self.db.conn.commit()
+
         return self.create_attempt(node_id, clean, None)
 
     def get_attempt(self, attempt_id: int) -> dict:
@@ -977,27 +1253,260 @@ class LearningService:
         self.db.conn.execute("UPDATE attempts SET answer_text=? WHERE id=?", (answer_text, attempt_id))
         self.db.conn.commit()
 
+    @staticmethod
+    def _question_id_by_dimension(test_json: dict) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for question in test_json.get("questions", []):
+            dimension = str(question.get("dimension", "") or "")
+            qid = str(question.get("id", "") or "")
+            if dimension and qid:
+                out[dimension] = qid
+        return out
+
+    def _normalize_verification_issues(self, grade: dict, attempt: dict, node: dict) -> list[dict]:
+        """Normalize Reviewer correction items and provide a useful legacy fallback.
+
+        v0.3.9 Reviewer prompts return structured ``issues``. Existing v0.3.8 scores only
+        contain dimension evidence/weaknesses, so when reopening an already-failed attempt
+        we synthesize one card per failed dimension instead of forcing the learner to guess.
+        """
+        raw_issues = grade.get("issues", [])
+        if isinstance(raw_issues, dict):
+            raw_issues = [raw_issues]
+        if not isinstance(raw_issues, list):
+            raw_issues = []
+
+        q_by_dimension = self._question_id_by_dimension(attempt.get("test", {}))
+        normalized: list[dict] = []
+        allowed_dimensions = {"explanation", "prediction", "implementation", "diagnosis", "transfer"}
+        allowed_severity = {"error", "warning", "info"}
+
+        for raw in raw_issues:
+            if not isinstance(raw, dict):
+                continue
+            dimension = str(raw.get("dimension", "") or "").strip()
+            if dimension not in allowed_dimensions:
+                continue
+            question_id = str(raw.get("question_id", "") or q_by_dimension.get(dimension, "")).strip()
+            task_ids = raw.get("related_task_ids", [])
+            if isinstance(task_ids, str):
+                task_ids = [task_ids]
+            if not isinstance(task_ids, list):
+                task_ids = []
+            task_ids = [str(x).strip() for x in task_ids if str(x).strip()]
+            severity = str(raw.get("severity", "warning") or "warning").strip().lower()
+            if severity not in allowed_severity:
+                severity = "warning"
+            normalized.append({
+                "question_id": question_id,
+                "dimension": dimension,
+                "title": str(raw.get("title", "需要修正") or "需要修正").strip(),
+                "detail": str(raw.get("detail", "") or "").strip(),
+                "correction": str(raw.get("correction", "") or "").strip(),
+                "related_task_ids": task_ids,
+                "severity": severity,
+            })
+
+        if normalized:
+            return normalized
+
+        # Legacy v0.3.8 fallback. Prefer the old ``weaknesses`` list when it already
+        # contains Q1/Q2/... markers because those are usually one-problem-per-line and
+        # therefore make a better repair panel than one large paragraph per dimension.
+        scores = grade.get("scores", {}) if isinstance(grade.get("scores", {}), dict) else {}
+        evidence = grade.get("evidence", {}) if isinstance(grade.get("evidence", {}), dict) else {}
+        scoring = node.get("scoring", {})
+        minimums = scoring.get("minimums", DEFAULT_MINIMUMS)
+        dimension_by_q = {qid: dim for dim, qid in q_by_dimension.items()}
+
+        weaknesses = grade.get("weaknesses", [])
+        if isinstance(weaknesses, str):
+            weaknesses = [weaknesses]
+        mapped_legacy: list[dict] = []
+        if isinstance(weaknesses, list):
+            for index, item in enumerate(weaknesses, start=1):
+                text = str(item or "").strip()
+                if not text:
+                    continue
+                match = re.search(r"\b[qQ]([1-5])\b", text)
+                qid = f"q{match.group(1)}" if match else ""
+                dimension = dimension_by_q.get(qid, "")
+                if not dimension:
+                    for candidate in ("explanation", "prediction", "implementation", "diagnosis", "transfer"):
+                        if candidate.lower() in text.lower():
+                            dimension = candidate
+                            qid = q_by_dimension.get(candidate, "")
+                            break
+                if not dimension:
+                    continue
+                try:
+                    score = int(scores.get(dimension, 0))
+                except (TypeError, ValueError):
+                    score = 0
+                minimum = int(minimums.get(dimension, 0))
+                correction = str(evidence.get(dimension, "") or "").strip()
+                if not correction:
+                    correction = "按该条 Reviewer 批注修正对应技术机制；不需要重新整理已有源码材料。"
+                title_text = re.sub(r"^[qQ][1-5]\s*", "", text).strip(" ：:-")
+                if len(title_text) > 34:
+                    title_text = title_text[:34].rstrip() + "…"
+                mapped_legacy.append({
+                    "question_id": qid,
+                    "dimension": dimension,
+                    "title": title_text or f"历史评分薄弱点 {index}",
+                    "detail": text,
+                    "correction": correction,
+                    "related_task_ids": [],
+                    "severity": "error" if score < minimum else "warning",
+                })
+        if mapped_legacy:
+            return mapped_legacy
+
+        # If the old weaknesses are not mappable, synthesize one card per failed
+        # dimension from the detailed Reviewer evidence already stored in SQLite.
+        for dimension, minimum in minimums.items():
+            try:
+                score = int(scores.get(dimension, 0))
+            except (TypeError, ValueError):
+                score = 0
+            if score >= int(minimum):
+                continue
+            detail = str(evidence.get(dimension, "") or "").strip()
+            if not detail:
+                detail = f"{dimension} 当前 {score} 分，低于门槛 {minimum} 分。"
+            normalized.append({
+                "question_id": q_by_dimension.get(dimension, ""),
+                "dimension": dimension,
+                "title": f"{dimension} 未达到当前门槛",
+                "detail": detail,
+                "correction": "按 Reviewer 批注修正其中的错误机制；不需要重新整理已经保存的源码材料。",
+                "related_task_ids": [],
+                "severity": "error",
+            })
+
+        if normalized:
+            return normalized
+
+        if isinstance(weaknesses, list):
+            for index, item in enumerate(weaknesses, start=1):
+                text = str(item or "").strip()
+                if not text:
+                    continue
+                normalized.append({
+                    "question_id": "",
+                    "dimension": "",
+                    "title": f"历史评分薄弱点 {index}",
+                    "detail": text,
+                    "correction": "按此批注修正后重新作答同一冻结试卷。",
+                    "related_task_ids": [],
+                    "severity": "warning",
+                })
+        return normalized
+
+    def get_attempt_feedback(self, attempt_id: int) -> dict | None:
+        row = self.db.conn.execute(
+            """SELECT s.*, a.test_json, a.answer_text, a.attempt_no, a.status AS attempt_status
+               FROM score_records s JOIN attempts a ON a.id=s.attempt_id
+               WHERE s.attempt_id=?""",
+            (attempt_id,),
+        ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        try:
+            test_json = json.loads(data.get("test_json") or "{}")
+        except json.JSONDecodeError:
+            test_json = {}
+        try:
+            answers = json.loads(data.get("answer_text") or "{}")
+        except json.JSONDecodeError:
+            answers = {}
+        try:
+            evidence = json.loads(data.get("evidence_json") or "{}")
+        except json.JSONDecodeError:
+            evidence = {}
+        try:
+            weaknesses = json.loads(data.get("weaknesses_json") or "[]")
+        except json.JSONDecodeError:
+            weaknesses = []
+        try:
+            issues = json.loads(data.get("issues_json") or "[]")
+        except json.JSONDecodeError:
+            issues = []
+        return {
+            "attempt_id": int(data["attempt_id"]),
+            "attempt_no": int(data["attempt_no"]),
+            "status": str(data.get("attempt_status") or ""),
+            "passed": bool(data.get("passed")),
+            "total": int(data.get("total", 0)),
+            "scores": {
+                "explanation": int(data.get("explanation", 0)),
+                "prediction": int(data.get("prediction", 0)),
+                "implementation": int(data.get("implementation", 0)),
+                "diagnosis": int(data.get("diagnosis", 0)),
+                "transfer": int(data.get("transfer", 0)),
+            },
+            "test": test_json,
+            "answers": answers if isinstance(answers, dict) else {},
+            "evidence": evidence if isinstance(evidence, dict) else {},
+            "weaknesses": weaknesses if isinstance(weaknesses, list) else [],
+            "issues": issues if isinstance(issues, list) else [],
+        }
+
+    def get_latest_failed_verification_feedback(self, node_id: int) -> dict | None:
+        row = self.db.conn.execute(
+            """SELECT a.id
+               FROM attempts a JOIN score_records s ON s.attempt_id=a.id
+               WHERE a.node_id=? AND a.review_id IS NULL AND a.attempt_kind='VERIFICATION' AND s.passed=0
+               ORDER BY a.id DESC LIMIT 1""",
+            (node_id,),
+        ).fetchone()
+        if not row:
+            return None
+        feedback = self.get_attempt_feedback(int(row["id"]))
+        if feedback and not feedback.get("issues"):
+            node = self.get_node(node_id)
+            legacy_grade = {
+                "scores": feedback.get("scores", {}),
+                "evidence": feedback.get("evidence", {}),
+                "weaknesses": feedback.get("weaknesses", []),
+            }
+            attempt = {"test": feedback.get("test", {})}
+            feedback["issues"] = self._normalize_verification_issues(legacy_grade, attempt, node)
+        return feedback
+
     def grade_attempt(self, attempt_id: int, grade: dict) -> dict:
         attempt = self.get_attempt(attempt_id)
         node = self.get_node(int(attempt["node_id"]))
         scores = grade.get("scores", {})
         scoring = node.get("scoring", {})
         minimums = scoring.get("minimums", DEFAULT_MINIMUMS)
-        result = evaluate_scores(scores, node["target_score"], minimums)
+        # v0.3.11: 70 points advances the route. The frozen plan's target_score
+        # (normally 80) is retained as the mastery target, while old dimension
+        # minimums become advisory warnings instead of hard blockers.
+        mastery_score = max(ROUTE_PASS_SCORE, int(node.get("target_score") or 80))
+        result = evaluate_scores(
+            scores,
+            pass_score=ROUTE_PASS_SCORE,
+            minimums=minimums,
+            mastery_score=mastery_score,
+        )
+        issues = self._normalize_verification_issues(grade, attempt, node)
         now = now_iso()
         day = today_iso()
         with self.db.transaction() as conn:
             conn.execute(
                 """INSERT INTO score_records(
                     attempt_id,node_id,score_day,explanation,prediction,implementation,diagnosis,transfer,total,passed,
-                    evidence_json,weaknesses_json,created_at
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    evidence_json,weaknesses_json,issues_json,created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     attempt_id, node["id"], day,
                     int(scores["explanation"]), int(scores["prediction"]), int(scores["implementation"]),
                     int(scores["diagnosis"]), int(scores["transfer"]), result.total, 1 if result.passed else 0,
                     json.dumps(grade.get("evidence", {}), ensure_ascii=False),
-                    json.dumps(grade.get("weaknesses", []), ensure_ascii=False), now,
+                    json.dumps(grade.get("weaknesses", []), ensure_ascii=False),
+                    json.dumps(issues, ensure_ascii=False), now,
                 ),
             )
             score_id = int(conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"])
@@ -1034,7 +1543,17 @@ class LearningService:
                     conn.execute("UPDATE nodes SET status='FAILED', updated_at=? WHERE id=?", (now, node["id"]))
 
         self._refresh_node_scores(node["id"])
-        return {"total": result.total, "passed": result.passed, "failures": list(result.failures)}
+        return {
+            "total": result.total,
+            "passed": result.passed,
+            "mastered": result.mastered,
+            "tier": result.tier,
+            "pass_score": ROUTE_PASS_SCORE,
+            "mastery_score": mastery_score,
+            "failures": list(result.failures),
+            "warnings": list(result.warnings),
+            "issues": issues,
+        }
 
     def _schedule_reviews(self, conn, node_id: int, total: int, score_id: int, now: str) -> None:
         if total <= 84:

@@ -7,10 +7,54 @@ def _pretty(value) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
+def _is_history_audit_node(node: dict) -> bool:
+    code = str(node.get("node_code", ""))
+    title = str(node.get("title", ""))
+    return code in {"NRPC-S0-01", "NRPC-S0-02"} or "历史能力审计" in title
+
+
+def _history_audit_exam_policy(node: dict) -> str:
+    if not _is_history_audit_node(node):
+        return ""
+    return (
+        "\n历史审计节点专用职责边界：\n"
+        "- 叶子任务阶段负责一次性采集源码路径、函数、调用链、测试/日志和证据备注；正式测试不得要求学习者把这些材料再抄一遍。\n"
+        "- 正式测试的学习者回答只考：机制解释、运行预测、具体故障诊断、当前机制内的技术迁移。\n"
+        "- explanation / prediction / diagnosis / transfer 不得因为学习者没有重复写源码绝对路径、行号或粘贴代码而扣分；如果机制本身错误，直接批注错误机制。\n"
+        "- implementation 是系统自动复核项：LearningCI 自动附带已保存的叶子工程证据和小节验收结果，学习者无需作答。\n"
+        "- diagnosis 必须给一个具体故障/错误改动/异常现象让学习者诊断，不得要求学习者自己再挑问题写一份小型审计报告。\n"
+        "- 不得要求学习者判断未来 Stage 应‘复用/最小恢复/重新验证/重做’，这类路线决策属于 Reviewer/架构上下文。\n"
+        "- transfer 必须用当前机制内的陌生变化/破坏性修改测试迁移能力，不得让学习者替 Master Plan 做技术路线分类。\n"
+    )
+
+
 def build_test_prompt(node: dict, previous_tests: list[dict] | None = None, is_retest: bool = False) -> str:
     previous_tests = previous_tests or []
     mode = "延迟复测" if is_retest else "正式 Verification"
     anchor = node.get("project_anchor", {})
+    history = _is_history_audit_node(node)
+    history_policy = _history_audit_exam_policy(node)
+    evidence_rule = (
+        "3. 历史审计节点不得让学习者重复提交源码证据；implementation 必须设置 requires_answer=false，其 25 分由 LearningCI 自动附带的既有工程证据评分；diagnosis 必须给具体故障场景。"
+        if history else
+        "3. implementation / diagnosis 必须要求可验证的代码、测试、日志、抓包或实验依据之一。"
+    )
+    question_format = {
+        "node_id": node["node_code"],
+        "questions": [
+            {"id": "q1", "dimension": "explanation", "max_score": 15, "question": "..."},
+            {"id": "q2", "dimension": "prediction", "max_score": 15, "question": "..."},
+            {
+                "id": "q3", "dimension": "implementation", "max_score": 25,
+                **({"requires_answer": False, "question": "系统自动复核已有工程证据，无需学习者作答。"} if history else {"question": "..."}),
+            },
+            {
+                "id": "q4", "dimension": "diagnosis", "max_score": 25,
+                "question": "给出一个具体故障/错误改动后要求诊断..." if history else "...",
+            },
+            {"id": "q5", "dimension": "transfer", "max_score": 20, "question": "..."},
+        ],
+    }
     return f"""你现在是 LearningCI 的严格考官。
 
 当前模式：{mode}
@@ -41,31 +85,36 @@ def build_test_prompt(node: dict, previous_tests: list[dict] | None = None, is_r
 规则：
 1. 只围绕当前节点出题，禁止扩展学习路线。
 2. 不给答案、不提示关键结论。
-3. implementation / diagnosis 必须要求可验证的代码、测试、日志、抓包或实验依据之一。
+{evidence_rule}
 4. 题目只能要求当前节点或项目锚点中已经规定的工程产物，禁止临时扩张项目范围。
 5. 如果是复测，必须换场景、换数据、换代码，不能复用旧题。
 6. 题目总分必须严格等于 100。
 7. 返回纯 JSON，不要 markdown fence，不要附加解释。
-
+{history_policy}
 之前使用过的试卷（不得重复）：
 {_pretty(previous_tests[-3:])}
 
 返回格式：
-{{
-  "node_id": "{node['node_code']}",
-  "questions": [
-    {{"id":"q1","dimension":"explanation","max_score":15,"question":"..."}},
-    {{"id":"q2","dimension":"prediction","max_score":15,"question":"..."}},
-    {{"id":"q3","dimension":"implementation","max_score":25,"question":"..."}},
-    {{"id":"q4","dimension":"diagnosis","max_score":25,"question":"..."}},
-    {{"id":"q5","dimension":"transfer","max_score":20,"question":"..."}}
-  ]
-}}
+{_pretty(question_format)}
 """
 
 
-def build_grade_prompt(node: dict, test_json: dict, answers: dict[str, str] | str) -> str:
+def build_grade_prompt(
+    node: dict,
+    test_json: dict,
+    answers: dict[str, str] | str,
+    system_evidence: dict | None = None,
+) -> str:
     answer_block = _pretty(answers) if isinstance(answers, dict) else str(answers)
+    history = _is_history_audit_node(node)
+    history_policy = _history_audit_exam_policy(node)
+    evidence_block = _pretty(system_evidence or {}) if history else "{}"
+    evidence_rule = (
+        "3. implementation 的 25 分只依据 LearningCI 自动附带的既有工程证据评分；学习者不需要也不应该在 q3 重复作答。"
+        " explanation / prediction / diagnosis / transfer 不得因未重复写源码路径而扣分，只按技术机制是否正确评分。"
+        if history else
+        "3. implementation / diagnosis 如果只有口头描述、没有题目要求的证据，应明确扣分。"
+    )
     return f"""你现在是 LearningCI Reviewer。只评分，不重新规划路线。
 
 节点：{node['node_code']} - {node['title']}
@@ -74,8 +123,11 @@ def build_grade_prompt(node: dict, test_json: dict, answers: dict[str, str] | st
 正式试卷：
 {_pretty(test_json)}
 
-我的逐题回答与工程证据：
+我的逐题回答：
 {answer_block}
+
+LearningCI 自动附带的既有工程证据（不是学习者本次重复作答）：
+{evidence_block}
 
 请严格评分：
 - explanation / 15
@@ -85,13 +137,17 @@ def build_grade_prompt(node: dict, test_json: dict, answers: dict[str, str] | st
 - transfer / 20
 
 要求：
-1. 每一分必须能从对应问题的回答或工程证据中解释。
+1. 每一分必须能从对应回答或系统附带工程证据中解释。
 2. 缺少证据的维度不能脑补。
-3. implementation / diagnosis 如果只有口头描述、没有题目要求的证据，应明确扣分。
-4. 不决定 PASS/FAIL；LearningCI 本地程序会按冻结规则计算。
+{evidence_rule}
+4. 不决定 PASS/FAIL；LearningCI 本地程序计算结果：总分 >=70 即可推进主线，80 分及原维度门槛作为稳定掌握目标。维度短板应写入 issues，但不应为了凑门槛夸大扣分。
 5. 不给新的学习路线，不要求当前节点之外的新工程内容。
-6. 返回纯 JSON，不要 markdown fence，不要额外文字。
-
+6. 如果当前节点属于历史能力审计，不得因为学习者没有替未来 Stage 做“复用/恢复/重做”规划而扣分。
+7. 对学习者机制回答有错误或漏项时，直接指出具体机制错误；不要要求其重新整理一遍已有源码材料。
+8. 如果存在需要修正的技术机制，必须逐条写入 issues。每条只写一个问题，给出 question_id、dimension、短标题、具体错误、正确机制/修正方向；related_task_ids 只能引用系统附带证据中真实存在的 task_id，找不到就返回空数组，禁止编造。
+9. correction 必须直接告诉学习者“正确机制是什么/应该改正哪一个认知”，不能只写“再复习”“重新阅读源码”。
+10. 返回纯 JSON，不要 markdown fence，不要额外文字。
+{history_policy}
 返回格式：
 {{
   "scores": {{
@@ -108,7 +164,18 @@ def build_grade_prompt(node: dict, test_json: dict, answers: dict[str, str] | st
     "diagnosis": "...",
     "transfer": "..."
   }},
-  "weaknesses": ["..."]
+  "issues": [
+    {{
+      "question_id": "q2",
+      "dimension": "prediction",
+      "title": "一句话短标题",
+      "detail": "具体指出当前回答错在哪里或漏了哪一步",
+      "correction": "直接写正确机制或应该修正成什么理解",
+      "related_task_ids": ["S0-01-TC-04"],
+      "severity": "error"
+    }}
+  ],
+  "weaknesses": ["兼容旧版本的简短薄弱点列表；与 issues 保持一致"]
 }}
 """
 

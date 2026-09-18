@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = r"""
 PRAGMA foreign_keys = ON;
@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS score_records (
     passed INTEGER NOT NULL,
     evidence_json TEXT NOT NULL,
     weaknesses_json TEXT NOT NULL,
+    issues_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scores_node ON score_records(node_id, created_at);
@@ -233,6 +234,10 @@ class Database:
             self.conn.execute("ALTER TABLE node_bundles ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
         if "updated_at" not in columns:
             self.conn.execute("ALTER TABLE node_bundles ADD COLUMN updated_at TEXT")
+
+        score_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(score_records)").fetchall()}
+        if "issues_json" not in score_columns:
+            self.conn.execute("ALTER TABLE score_records ADD COLUMN issues_json TEXT NOT NULL DEFAULT '[]'")
 
         # v0.2.0 already stored compiler.status inside bundle_json. Promote that state into
         # a dedicated column once so future generated bundles remain replaceable until frozen.
