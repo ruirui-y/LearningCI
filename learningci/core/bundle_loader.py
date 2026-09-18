@@ -77,9 +77,19 @@ def validate_bundle(bundle: dict, expected_node_code: str | None = None) -> None
     for group in groups:
         if not str(group.get("id", "")).strip() or not str(group.get("title", "")).strip():
             raise ValueError(f"{node_code}: 任务组 id/title 为空")
-        items = group.get("items")
+        # 兼容 AI 生成的不同细化包格式
+        # 标准格式: items
+        # 兼容格式: leaf_tasks / tasks
+        items = (
+            group.get("items")
+            or group.get("leaf_tasks")
+            or group.get("tasks")
+            or []
+        )
         if not isinstance(items, list) or not items:
-            raise ValueError(f"{node_code}: 任务组 {group.get('id')} 没有叶子任务")
+            raise ValueError(
+                f"{node_code}: 任务组 {group.get('id')} 缺少叶子任务列表，支持字段: items / leaf_tasks / tasks"
+            )
         for item in items:
             code = str(item.get("id", "")).strip()
             if not code:
