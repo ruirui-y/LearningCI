@@ -24,7 +24,8 @@ class PlanPage(QWidget):
         legend = QLabel(
             "字段说明：执行包状态 = 当前 Node 的任务清单是否已细化/审核/冻结；"
             "固定试卷 = 这个 Node 第一次正式验收使用的试卷；"
-            "学习状态 = 当前是否轮到它；稳定分 = 把延迟复测后的掉分也算进去的长期成绩。"
+            "学习状态 = 当前是否轮到它；正式测试总分 70 即可推进下一 Node，80+ 作为稳定掌握目标；"
+            "稳定分 = 把延迟复测后的掉分也算进去的长期成绩。"
         )
         legend.setObjectName("Secondary")
         legend.setWordWrap(True)

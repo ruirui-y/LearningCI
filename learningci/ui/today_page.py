@@ -286,7 +286,7 @@ class TodayPage(QWidget):
         paper_head.addStretch(1)
         paper_head.addWidget(self.paper_meta)
         paper_layout.addLayout(paper_head)
-        paper_note = QLabel("试卷从节点开始就固定可见，用来明确通关目标；所有必做叶子任务完成后才允许正式提交。首次未通过后仍使用同一张试卷。")
+        paper_note = QLabel("试卷从节点开始就固定可见；所有必做叶子任务完成后才允许正式提交。总分 70 即可推进下一节点，80+ 作为稳定掌握目标；首次未通过仍使用同一张试卷。")
         paper_note.setObjectName("Muted")
         paper_note.setWordWrap(True)
         paper_layout.addWidget(paper_note)
@@ -892,7 +892,11 @@ class TodayPage(QWidget):
             return
         dlg = AssessmentDialog(self.service, self.node, parent=self)
         dlg.graded.connect(self._after_grade)
+        dlg.task_jump_requested.connect(self._jump_to_task)
         dlg.exec()
+        # 正式测试窗口可能记录了一段专注时间；关闭后立即刷新今日/周/月统计。
+        self.refresh()
+        self.data_changed.emit()
 
     def _after_grade(self) -> None:
         self.refresh()
