@@ -1,0 +1,382 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S0-02",
+  "node_title": "game_rpc_project 历史能力审计",
+  "source_plan_version": "0.3-learningci-full",
+  "source_section": "§4.2 / §4.4 / §7 / §30",
+  "task_count": 17,
+  "task_groups": [
+    {
+      "id": "rpc_history_audit",
+      "title": "旧 RPC 同步模型与能力审计",
+      "leaf_tasks": [
+        {
+          "id": "S0-02-RPC-01",
+          "title": "RPC调用入口审计",
+          "detail": "定位 MyChannel/RPC 调用入口，确认调用方如何进入 RPC 框架。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "MyChannel::CallMethod 或等价入口完成源码绑定",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-02",
+          "title": "RpcHeader协议审计",
+          "detail": "确认旧 RPC 请求头结构、method、request id 编解码。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录 RpcHeader 定义和解析函数",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-03",
+          "title": "RequestId生成审计",
+          "detail": "追踪请求编号生成位置和生命周期。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "说明 request id 如何贯穿请求",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-04",
+          "title": "PendingCall结构审计",
+          "detail": "定位 PendingCall 保存请求状态的位置。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录 map/容器和状态字段",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-05",
+          "title": "promise创建审计",
+          "detail": "确认异步结果等待对象创建位置。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定 promise/future 相关代码",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-06",
+          "title": "future等待审计",
+          "detail": "定位 future.wait_for 使用位置和超时语义。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "说明同步阻塞边界",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-07",
+          "title": "ReceiverThread入口审计",
+          "detail": "定位接收线程启动和职责。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录线程入口函数",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-08",
+          "title": "ReceiverThread响应解析审计",
+          "detail": "追踪响应如何被接收线程解析。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录解析调用链",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-09",
+          "title": "RequestId匹配响应审计",
+          "detail": "确认 response 如何找到对应 PendingCall。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "写出匹配流程",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-10",
+          "title": "PendingCall完成审计",
+          "detail": "确认 promise.set_value/set_exception 完成位置。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定完成函数",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-11",
+          "title": "连接池审计",
+          "detail": "定位 ConnectionPool 创建和复用连接逻辑。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "说明连接生命周期",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-12",
+          "title": "RPCServer分发审计",
+          "detail": "定位服务端请求解析和调用分发。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录服务注册与调用链",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-13",
+          "title": "Protobuf Service审计",
+          "detail": "确认 protobuf service 分发模型。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定 service/callback 入口",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-14",
+          "title": "错误处理审计",
+          "detail": "确认旧 RPC 对失败、断连、超时的处理。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "列出真实代码边界",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-15",
+          "title": "同步模型边界审计",
+          "detail": "总结 ReceiverThread+future.wait_for 的同步限制。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "基于源码形成边界说明",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-16",
+          "title": "GAME_RPC_AUDIT证据整理",
+          "detail": "将关键结论写入历史审计文档。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "每条结论绑定源码位置",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        },
+        {
+          "id": "S0-02-RPC-17",
+          "title": "旧RPC能力矩阵验收",
+          "detail": "整理已解决能力和未解决问题。",
+          "purpose": "确认旧 RPC 真实实现能力边界，不重新实现 RPC。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "生成可复核能力矩阵",
+            "证据可由 IDE/gitre grep 或源码复核"
+          ]
+        }
+      ]
+    }
+  ],
+  "verification_paper": {
+    "paper_id": "NRPC-S0-02-V1.2",
+    "version": 1,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "解释 CallMethod→RequestId→PendingCall→ReceiverThread→promise/future 的完整链路以及每个对象职责。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "预测同时多个RPC请求返回乱序时，旧同步模型如何通过RequestId匹配响应。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "系统自动复核叶子任务工程证据，不要求重复整理源码材料。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "诊断ReceiverThread或future.wait_for导致的同步模型限制，依据真实源码说明。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "分析去掉ReceiverThread或改变PendingCall完成机制后当前模型会受到什么影响。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "mode": "fixed_paper",
+    "intervals": [
+      "7d",
+      "30d"
+    ]
+  }
+}
