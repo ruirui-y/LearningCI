@@ -5,9 +5,9 @@
   "source_plan_version": "0.3-learningci-full",
   "source_section": "§4.2 / §4.4 / §7 / §30",
   "compiler": {
-    "type": "ChatGPT 手工导出导入细化",
+    "type": "ChatGPT Manual Node Refiner",
     "status": "REVIEWED",
-    "note": "由 LearningCI 导出细化包，经聊天式 AI 生成后人工导回；未使用任何模型 API。"
+    "note": "依据节点细化包规则生成，保留冻结结构与固定试卷。"
   },
   "task_policy": {
     "single_active_leaf_task": true,

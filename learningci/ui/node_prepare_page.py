@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QAbstractItemView, QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
     QPushButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -47,6 +47,8 @@ class NodePreparePage(QWidget):
             "• 草稿（待细化）：只有基础任务，不允许正式学习。\n"
             "• 已审核（可冻结）：已由 ChatGPT 单节点细化，并通过本地格式与路线边界校验。\n"
             "• 已冻结：到达当前主线或已经产生学习证据，之后禁止覆盖。\n\n"
+            "细化时会保护已有任务组的小节边界：允许继续拆分，但禁止把多个技术组压成一个大组。\n"
+            "单节点通常建议 20~30 个高质量叶子任务；数量不是硬门槛，must_learn 覆盖完整优先。\n\n"
             "这样既保证你永远有下一步，又不会提前半年把未来源码路径幻想出来。"
         )
         e.setWordWrap(True)
@@ -65,7 +67,7 @@ class NodePreparePage(QWidget):
         root.addWidget(self.table, 1)
 
         actions = QHBoxLayout()
-        self.export_btn = QPushButton("导出节点细化包")
+        self.export_btn = QPushButton("导出节点细化包并复制 AI 提示词")
         self.export_btn.setObjectName("PrimaryButton")
         self.import_btn = QPushButton("导入 ChatGPT 细化结果")
         self.import_btn.setObjectName("SuccessButton")
@@ -136,7 +138,8 @@ class NodePreparePage(QWidget):
             f"学习状态：{learning_state_text(row['learning_state'])}\n"
             f"准备窗口：{window_note}\n\n"
             "导出的 ZIP 已包含：冻结节点定义、当前基础执行包、NebulaRPC 总计划、前置节点结果、"
-            "返回 JSON 结构约束和求职证据背景。你只需要上传 ZIP 给 ChatGPT，不需要再手工解释上下文。"
+            "返回 JSON 结构约束、自检清单和求职证据背景。导出成功后，LearningCI 还会自动把精确的 AI 提示词复制到剪贴板。\n\n"
+            "下一步只需要：上传 ZIP → 粘贴剪贴板提示词 → 发送 → 保存 AI 返回的 JSON → 回本页导入。"
         )
 
     def _export(self) -> None:
@@ -151,13 +154,18 @@ class NodePreparePage(QWidget):
             return
         try:
             result = self.service.export_refinement_package(row["id"], Path(path))
+            prompt = self.service.get_refinement_ai_prompt(row["id"])
+            QApplication.clipboard().setText(prompt)
             QMessageBox.information(
                 self,
                 "节点细化包已导出",
                 f"已生成：\n{result}\n\n"
-                "把 ZIP 上传给 ChatGPT，并说：\n"
-                "“按压缩包中的 01-节点细化要求.md 细化当前节点。”\n\n"
-                "ChatGPT 返回 JSON 后，再回到本页导入。",
+                "AI 节点细化提示词已经自动复制到系统剪贴板。\n\n"
+                "下一步：\n"
+                "1. 把这个 ZIP 上传给 ChatGPT\n"
+                "2. 直接 Ctrl+V 粘贴提示词并发送\n"
+                "3. 将 ChatGPT 返回的唯一 JSON 保存后回到本页导入\n\n"
+                "如果剪贴板被覆盖，ZIP 内的 00-复制给AI的提示词.txt 保存了同一份提示词。",
             )
         except Exception as exc:
             QMessageBox.critical(self, "导出失败", str(exc))
@@ -173,16 +181,23 @@ class NodePreparePage(QWidget):
             return
         try:
             preview = self.service.preview_refined_bundle(row["id"], Path(path))
+            warnings = preview.get("structure_warnings", [])
+            warning_text = ""
+            if warnings:
+                warning_text = "\n结构提醒：\n- " + "\n- ".join(warnings) + "\n"
+            recommended = preview.get("recommended_task_range", [20, 30])
             answer = QMessageBox.question(
                 self,
                 "确认采用细化结果",
                 f"Node：{preview['node_code']}\n\n"
-                f"任务组：{preview['old_groups']} → {preview['new_groups']}\n"
-                f"叶子任务：{preview['old_tasks']} → {preview['new_tasks']}\n"
+                f"任务组：{preview['old_groups']} → {preview['new_groups']}（结构保护已通过）\n"
+                f"叶子任务：{preview['old_tasks']} → {preview['new_tasks']} "
+                f"（通常建议 {recommended[0]}~{recommended[1]}）\n"
                 f"执行包状态：{bundle_state_text(preview['old_state'])} → 已审核（可冻结）\n"
                 f"下一版本：第 {preview['next_revision']} 版\n"
-                f"固定试卷：{preview['paper_id']}\n\n"
-                "返回文件已经通过本地校验。是否正式采用？\n"
+                f"固定试卷：{preview['paper_id']}\n"
+                f"{warning_text}\n"
+                "返回文件已经通过格式、路线与任务组结构校验。是否正式采用？\n"
                 "采用前旧执行包会自动备份。",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,

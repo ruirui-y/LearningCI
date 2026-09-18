@@ -17,6 +17,33 @@ EXPECTED_SCORES = {
 
 VALID_BUNDLE_STATES = {"GENERATED", "REVIEWED", "FROZEN"}
 
+TASK_ITEM_KEYS = ("items", "leaf_tasks", "tasks")
+
+
+def task_group_items(group: dict) -> list:
+    """Return leaf tasks from the canonical field or supported AI aliases."""
+    for key in TASK_ITEM_KEYS:
+        value = group.get(key)
+        if isinstance(value, list) and value:
+            return value
+    return []
+
+
+def normalize_bundle_task_groups(bundle: dict) -> dict:
+    """Normalize AI aliases to the canonical ``task_groups[].items`` shape.
+
+    Validation accepts leaf_tasks/tasks for import compatibility, but the rest of
+    LearningCI intentionally reads only ``items``. Canonicalizing at the boundary
+    prevents a bundle from validating successfully and then appearing empty in the UI.
+    """
+    for group in bundle.get("task_groups", []) or []:
+        items = task_group_items(group)
+        if items:
+            group["items"] = items
+        group.pop("leaf_tasks", None)
+        group.pop("tasks", None)
+    return bundle
+
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -80,12 +107,7 @@ def validate_bundle(bundle: dict, expected_node_code: str | None = None) -> None
         # 兼容 AI 生成的不同细化包格式
         # 标准格式: items
         # 兼容格式: leaf_tasks / tasks
-        items = (
-            group.get("items")
-            or group.get("leaf_tasks")
-            or group.get("tasks")
-            or []
-        )
+        items = task_group_items(group)
         if not isinstance(items, list) or not items:
             raise ValueError(
                 f"{node_code}: 任务组 {group.get('id')} 缺少叶子任务列表，支持字段: items / leaf_tasks / tasks"
@@ -118,6 +140,7 @@ def load_bundle_file(path: Path) -> tuple[dict, str]:
     raw = Path(path).read_bytes()
     data = json.loads(raw.decode("utf-8"))
     validate_bundle(data, Path(path).stem.split("_")[0] if "_已细化" in Path(path).stem else None)
+    normalize_bundle_task_groups(data)
     return data, _hash_bytes(raw)
 
 

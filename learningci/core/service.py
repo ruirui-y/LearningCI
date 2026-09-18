@@ -12,10 +12,11 @@ from learningci.config import (
     DEFAULT_BUNDLE_DIR, MASTER_PLAN_PATH, REPO_ROOT, SYNC_DB_PATH,
 )
 from learningci.core.scoring import DEFAULT_MINIMUMS, ROUTE_PASS_SCORE, evaluate_scores
-from learningci.core.bundle_loader import ensure_bundles_imported, validate_bundle
+from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_task_groups, validate_bundle
 from learningci.core.refinement_bridge import (
-    backup_bundle_file, export_refinement_package as build_refinement_zip,
-    install_reviewed_bundle, stage_candidate_file,
+    analyze_refinement_structure, backup_bundle_file, build_refinement_ai_prompt,
+    export_refinement_package as build_refinement_zip, install_reviewed_bundle,
+    stage_candidate_file,
 )
 from learningci.database import Database
 
@@ -367,6 +368,7 @@ class LearningService:
         if not row:
             raise RuntimeError(f"node {node_id} 没有导入节点执行包")
         bundle = json.loads(row["bundle_json"])
+        normalize_bundle_task_groups(bundle)
         bundle["_bundle_hash"] = row["bundle_hash"]
         bundle["_source_path"] = row["source_path"]
         bundle["_bundle_state"] = row["bundle_state"]
@@ -465,6 +467,16 @@ class LearningService:
         schema_path = REPO_ROOT / "schemas" / "节点执行包结构.json"
         return build_refinement_zip(node, bundle, self._previous_context(node), schema_path, output_path)
 
+    def get_refinement_ai_prompt(self, node_id: int) -> str:
+        """Build the exact prompt that should accompany the exported refinement ZIP."""
+        self._assert_in_preparation_window(node_id)
+        node = self.get_node(node_id)
+        info = self.get_bundle_info(node_id)
+        if info["state"] == "FROZEN" or self._node_has_runtime_data(node_id):
+            raise RuntimeError("这个节点已经冻结或已经产生学习记录，不能重新细化。")
+        bundle = self.get_node_bundle(node_id)
+        return build_refinement_ai_prompt(node, bundle)
+
     def _validate_refined_data(self, node: dict, data: dict) -> str:
         validate_bundle(data, node["node_code"])
         if str(data.get("node_title", "")).strip() != node["title"]:
@@ -486,12 +498,24 @@ class LearningService:
         old_bundle = self.get_node_bundle(node_id)
         data, staged = stage_candidate_file(Path(source_path), node["node_code"])
         paper_id = self._validate_refined_data(node, data)
+        structure = analyze_refinement_structure(old_bundle, data)
+        if structure["errors"]:
+            try:
+                Path(staged).unlink()
+            except OSError:
+                pass
+            raise ValueError(
+                "节点细化结果破坏了任务组结构：\n\n- " + "\n- ".join(structure["errors"]) +
+                "\n\n请重新生成细化结果。既有任务组是小节验收边界，只允许保留或进一步拆分。"
+            )
         return {
             "node_code": node["node_code"],
-            "old_tasks": int(old_bundle.get("task_count", 0) or 0),
-            "new_tasks": int(data.get("task_count", 0) or 0),
-            "old_groups": len(old_bundle.get("task_groups", [])),
-            "new_groups": len(data.get("task_groups", [])),
+            "old_tasks": structure["old_tasks"],
+            "new_tasks": structure["new_tasks"],
+            "old_groups": structure["old_groups"],
+            "new_groups": structure["new_groups"],
+            "structure_warnings": structure["warnings"],
+            "recommended_task_range": structure["recommended_task_range"],
             "old_state": info["state"],
             "new_state": "REVIEWED",
             "next_revision": int(info["revision"] or 1) + 1,
@@ -509,6 +533,11 @@ class LearningService:
         old_bundle = self.get_node_bundle(node_id)
         data = json.loads(Path(staged_path).read_text(encoding="utf-8"))
         paper_id = self._validate_refined_data(node, data)
+        structure = analyze_refinement_structure(old_bundle, data)
+        if structure["errors"]:
+            raise ValueError(
+                "节点细化结果破坏了任务组结构：\n\n- " + "\n- ".join(structure["errors"])
+            )
         backup = backup_bundle_file(node["node_code"], info["revision"])
         installed = install_reviewed_bundle(node["node_code"], data)
         self.db.conn.execute("DELETE FROM leaf_task_progress WHERE node_id=?", (node_id,))
@@ -517,8 +546,8 @@ class LearningService:
         new_info = self.get_bundle_info(node_id)
         return {
             "node_code": node["node_code"],
-            "old_tasks": int(old_bundle.get("task_count", 0) or 0),
-            "new_tasks": int(data.get("task_count", 0) or 0),
+            "old_tasks": structure["old_tasks"],
+            "new_tasks": structure["new_tasks"],
             "old_state": info["state"],
             "new_state": new_info["state"],
             "revision": new_info["revision"],
@@ -1637,7 +1666,7 @@ class LearningService:
         # and re-import the current frozen plan/bundles after restore.
         self.db.initialize()
         from learningci.config import DEFAULT_BUNDLE_DIR, DEFAULT_PLAN_PATH
-        from learningci.core.bundle_loader import ensure_bundles_imported, validate_bundle
+        from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_task_groups, validate_bundle
         from learningci.core.plan_loader import ensure_plan_imported
         ensure_plan_imported(self.db, DEFAULT_PLAN_PATH)
         ensure_bundles_imported(self.db, DEFAULT_BUNDLE_DIR)
