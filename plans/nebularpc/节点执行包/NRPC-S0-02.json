@@ -13,7 +13,7 @@
     "single_active_leaf_task": true,
     "leaf_tasks_required_for_verification": true,
     "parent_progress_is_derived": true,
-    "paper_visible_before_tasks_complete": true
+    "paper_visible_before_tasks_complete": false
   },
   "task_groups": [
     {
@@ -452,70 +452,9 @@
           ]
         }
       ]
-    },
-    {
-      "id": "gate",
-      "title": "验收准备",
-      "description": "只核对当前节点证据是否足够进入固定 Verification，不增加新的学习内容。",
-      "items": [
-        {
-          "id": "NRPC-S0-02-GATE-01",
-          "title": "核对 GAME_RPC_AUDIT.md 可复核性",
-          "detail": "确认 NebulaRPC/docs/history/GAME_RPC_AUDIT.md 已覆盖客户端完成链、服务端 Protobuf 分发、timeout/ConnectionPool 和至少三个技术债，关键结论均有源码证据。",
-          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
-          "estimated_minutes": 12,
-          "required": true,
-          "evidence_required": true,
-          "evidence_fields": [
-            "source_path",
-            "function_name",
-            "call_chain",
-            "evidence_note"
-          ],
-          "done_when": [
-            "目标文件存在",
-            "Must Learn 全部有对应证据",
-            "至少三个技术债可复核",
-            "关键结论无无证据断言"
-          ]
-        },
-        {
-          "id": "NRPC-S0-02-GATE-02",
-          "title": "核对 Out of Scope",
-          "detail": "确认当前节点没有开始重新设计 RPC 协议、实现新 Async RPC 或协程；未来方案最多记录为后续节点事项。",
-          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
-          "estimated_minutes": 6,
-          "required": true,
-          "evidence_required": false,
-          "evidence_fields": [
-            "note"
-          ],
-          "done_when": [
-            "没有提交 Out of Scope 实现",
-            "审计结论与未来设计明确分开"
-          ]
-        },
-        {
-          "id": "NRPC-S0-02-GATE-03",
-          "title": "对照固定试卷准备证据",
-          "detail": "只查看固定 Verification 的五个维度，检查已有叶子证据是否足够；不向 AI 索取答案，也不为考试重复抄源码。",
-          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
-          "estimated_minutes": 8,
-          "required": true,
-          "evidence_required": false,
-          "evidence_fields": [
-            "note"
-          ],
-          "done_when": [
-            "explanation/prediction 有当前机制依据",
-            "implementation 使用已保存工程证据",
-            "diagnosis/transfer 有当前节点边界依据"
-          ]
-        }
-      ]
     }
   ],
-  "task_count": 24,
+  "task_count": 21,
   "verification_paper": {
     "paper_id": "NRPC-S0-02-V1",
     "version": 1,

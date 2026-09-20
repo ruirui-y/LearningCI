@@ -43,13 +43,13 @@ class NodePreparePage(QWidget):
         explain_box = QVBoxLayout(explain)
         explain_box.setContentsMargins(14, 12, 14, 12)
         e = QLabel(
-            "三节点准备窗口：只允许准备‘当前节点 + 后面两个主线节点’，更远的节点保持基础草稿。\n"
-            "• 草稿（待细化）：只有基础任务，不允许正式学习。\n"
-            "• 已审核（可冻结）：已由 ChatGPT 单节点细化，并通过本地格式与路线边界校验。\n"
-            "• 已冻结：到达当前主线或已经产生学习证据，之后禁止覆盖。\n\n"
-            "细化时会保护已有任务组的小节边界：允许继续拆分，但禁止把多个技术组压成一个大组。\n"
-            "单节点通常建议 20~30 个高质量叶子任务；数量不是硬门槛，must_learn 覆盖完整优先。\n\n"
-            "这样既保证你永远有下一步，又不会提前半年把未来源码路径幻想出来。"
+            "节点准备由系统管理，不是学习任务。\n"
+            "• 草稿：节点尚未生成可执行任务包。\n"
+            "• 已审核：任务结构通过校验，可以进入学习。\n"
+            "• 已冻结：学习证据已经产生，禁止覆盖。\n\n"
+            "系统会自动检查任务组边界、must_learn 覆盖和验收条件。\n"
+            "学习者只需要完成叶子任务、记录真实证据，并通过能力核对。\n\n"
+            "不会要求你提前理解路线管理、Verification 或内部审核流程。"
         )
         e.setWordWrap(True)
         e.setObjectName("Secondary")
@@ -67,7 +67,7 @@ class NodePreparePage(QWidget):
         root.addWidget(self.table, 1)
 
         actions = QHBoxLayout()
-        self.export_btn = QPushButton("导出节点细化包并复制 AI 提示词")
+        self.export_btn = QPushButton("生成学习任务包并复制 AI 提示词")
         self.export_btn.setObjectName("PrimaryButton")
         self.import_btn = QPushButton("导入 ChatGPT 细化结果")
         self.import_btn.setObjectName("SuccessButton")

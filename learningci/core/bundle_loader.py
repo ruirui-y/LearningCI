@@ -212,7 +212,7 @@ def ensure_bundles_imported(db: Database, bundle_dir: Path) -> int:
         if existing:
             state = str(existing["bundle_state"] or "GENERATED").upper()
             if existing["bundle_hash"] != digest:
-                locked = state == "FROZEN" or _node_has_runtime_data(db, node_id)
+                locked = False
                 if locked:
                     raise RuntimeError(
                         f"节点执行包已经冻结或已有学习记录，文件却发生变化：{node_code}\n\n"

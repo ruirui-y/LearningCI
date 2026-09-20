@@ -52,6 +52,21 @@ def _make_title(text: str, task_id: str) -> str:
     return first or "需要补充证据或修正结论"
 
 
+def _normalize_correction(item: dict[str, Any]) -> dict[str, str]:
+    correction = item.get("correction")
+    if isinstance(correction, dict):
+        return {
+            "why": str(correction.get("why", "")),
+            "action": str(correction.get("action", "")),
+            "example": str(correction.get("example", "")),
+        }
+    return {
+        "why": "",
+        "action": "",
+        "example": "",
+    }
+
+
 def normalize_section_issues(grade: dict[str, Any] | None, task_ids: list[str]) -> list[dict[str, str]]:
     """Normalize structured v0.3.4 issues and legacy weaknesses for the UI.
 
@@ -84,6 +99,9 @@ def normalize_section_issues(grade: dict[str, Any] | None, task_ids: list[str]) 
                         "title": title,
                         "detail": detail or title,
                         "severity": severity,
+                        "correction_why": _normalize_correction(raw).get("why", ""),
+                        "correction_action": _normalize_correction(raw).get("action", ""),
+                        "correction_example": _normalize_correction(raw).get("example", ""),
                     })
             elif raw is not None:
                 text = str(raw).strip()

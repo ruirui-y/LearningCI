@@ -251,6 +251,11 @@ class LearningService:
         # learner to paste the same grade again.
         self._reconcile_relaxed_verification_gate()
 
+    def _is_root_plan_node(self, node_id: int) -> bool:
+        """Only root plan records are immutable; child execution bundles can be updated."""
+        # Current node table stores executable child nodes; root plan protection is handled by plan layer.
+        return False
+
     def _reconcile_relaxed_verification_gate(self) -> None:
         rows = self.db.conn.execute(
             """SELECT s.id AS score_id,s.node_id,s.attempt_id,s.total,s.created_at
