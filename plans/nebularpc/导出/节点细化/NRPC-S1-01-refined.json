@@ -7,7 +7,7 @@
   "compiler": {
     "type": "ChatGPT 手工导出导入细化",
     "status": "REVIEWED",
-    "note": "由 LearningCI 导出细化包，经聊天式 AI 生成后人工导回；未使用任何模型 API。"
+    "note": "按 LearningCI Stage 1 实现型节点规则细化：保留冻结路线、既有技术 task_group 边界与固定试卷；任务改为 coding-first，第一项即产生真实 C++ 修改，后续按实现→编译→运行/echo→日志/strace→故障诊断→修复再验证组织；未生成 gate/验收准备。"
   },
   "task_policy": {
     "single_active_leaf_task": true,
