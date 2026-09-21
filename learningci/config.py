@@ -16,7 +16,7 @@ MASTER_PLAN_PATH = PLAN_DIR / "NebulaRPC总计划.md"
 REFINE_EXPORT_DIR = PLAN_DIR / "导出" / "节点细化"
 REFINE_PROPOSED_DIR = PLAN_DIR / "待审核"
 APP_NAME = "LearningCI"
-APP_VERSION = "0.3.14"
+APP_VERSION = "0.3.24"
 
 
 def ensure_dirs() -> None:

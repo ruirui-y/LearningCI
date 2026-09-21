@@ -22,7 +22,7 @@ class PlanPage(QWidget):
         layout.addWidget(title)
         layout.addWidget(sub)
         legend = QLabel(
-            "字段说明：执行包状态 = 当前 Node 的任务清单是否已细化/审核/冻结；"
+            "字段说明：执行包状态 = 当前 Node 的任务清单是否已细化/审核/进入执行；子执行包可迭代覆盖；"
             "固定试卷 = 这个 Node 第一次正式验收使用的试卷；"
             "学习状态 = 当前是否轮到它；正式测试总分 70 即可推进下一 Node，80+ 作为稳定掌握目标；"
             "稳定分 = 把延迟复测后的掉分也算进去的长期成绩。"
@@ -38,7 +38,7 @@ class PlanPage(QWidget):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setToolTip(
-            "执行包状态：草稿（待细化）→ 已审核（可冻结）→ 已冻结。\n"
+            "执行包状态：草稿（待细化）→ 已审核（可执行）→ 执行中（可覆盖）。\n"
             "固定试卷：节点开始时就能预览，首次未通过时继续使用同一张试卷。"
         )
         layout.addWidget(self.table, 1)

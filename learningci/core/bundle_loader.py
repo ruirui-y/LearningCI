@@ -18,6 +18,8 @@ EXPECTED_SCORES = {
 VALID_BUNDLE_STATES = {"GENERATED", "REVIEWED", "FROZEN"}
 
 TASK_ITEM_KEYS = ("items", "leaf_tasks", "tasks")
+RESERVED_NON_LEARNING_GROUP_IDS = {"gate"}
+RESERVED_NON_LEARNING_GROUP_TITLES = {"验收准备"}
 
 
 def task_group_items(group: dict) -> list:
@@ -42,6 +44,35 @@ def normalize_bundle_task_groups(bundle: dict) -> dict:
             group["items"] = items
         group.pop("leaf_tasks", None)
         group.pop("tasks", None)
+    return bundle
+
+
+def strip_non_learning_task_groups(bundle: dict) -> list[str]:
+    """Remove system-only groups that must never become learner tasks.
+
+    ``gate / 验收准备`` is a legacy workflow artifact. Verification readiness is
+    checked by LearningCI itself, so old bundles are migrated automatically instead
+    of forcing the learner to complete process-management tasks.
+    """
+    groups = bundle.get("task_groups", []) or []
+    kept: list[dict] = []
+    removed: list[str] = []
+    for group in groups:
+        group_id = str(group.get("id", "")).strip()
+        title = str(group.get("title", "")).strip()
+        if group_id.lower() in RESERVED_NON_LEARNING_GROUP_IDS or title in RESERVED_NON_LEARNING_GROUP_TITLES:
+            removed.append(group_id or title)
+            continue
+        kept.append(group)
+    bundle["task_groups"] = kept
+    bundle["task_count"] = sum(len(task_group_items(group)) for group in kept)
+    return removed
+
+
+def normalize_bundle_for_learning(bundle: dict) -> dict:
+    """Canonicalize a node execution package before validation/use."""
+    normalize_bundle_task_groups(bundle)
+    strip_non_learning_task_groups(bundle)
     return bundle
 
 
@@ -139,9 +170,11 @@ def validate_bundle(bundle: dict, expected_node_code: str | None = None) -> None
 def load_bundle_file(path: Path) -> tuple[dict, str]:
     raw = Path(path).read_bytes()
     data = json.loads(raw.decode("utf-8"))
+    normalize_bundle_for_learning(data)
     validate_bundle(data, Path(path).stem.split("_")[0] if "_已细化" in Path(path).stem else None)
-    normalize_bundle_task_groups(data)
-    return data, _hash_bytes(raw)
+    # Hash the effective learner-facing package. Legacy files that still contain a
+    # system-only gate group therefore migrate once and cannot resurrect that group.
+    return data, _hash_json(data)
 
 
 def _node_has_runtime_data(db: Database, node_id: int) -> bool:
@@ -191,9 +224,9 @@ def _upsert_paper(db: Database, node_id: int, bundle: dict, bundle_hash: str, al
 def ensure_bundles_imported(db: Database, bundle_dir: Path) -> int:
     """Import baseline node execution packages.
 
-    GENERATED/REVIEWED bundles are still preparation material and may be replaced before any
-    runtime evidence exists. FROZEN bundles, or any bundle that already has learning evidence,
-    are immutable. This is the key difference from v0.2.0, which prematurely froze all 68 nodes.
+    ``plan.json`` is the immutable route contract. Per-node execution packages are
+    child plans and remain replaceable even after learning starts. Matching task ids
+    keep their evidence; the newest installed child package controls what the learner sees.
     """
     bundle_dir = Path(bundle_dir)
     nodes = db.conn.execute("SELECT id,node_code FROM nodes ORDER BY order_index").fetchall()
@@ -212,12 +245,6 @@ def ensure_bundles_imported(db: Database, bundle_dir: Path) -> int:
         if existing:
             state = str(existing["bundle_state"] or "GENERATED").upper()
             if existing["bundle_hash"] != digest:
-                locked = False
-                if locked:
-                    raise RuntimeError(
-                        f"节点执行包已经冻结或已有学习记录，文件却发生变化：{node_code}\n\n"
-                        "LearningCI 拒绝覆盖。请恢复原文件；如果只是准备未来节点，请使用“节点准备”页面导入细化结果。"
-                    )
                 db.conn.execute(
                     """UPDATE node_bundles SET bundle_hash=?,bundle_json=?,source_path=?,bundle_state=?,
                        revision=revision+1,updated_at=? WHERE node_id=?""",

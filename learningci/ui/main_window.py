@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QVBoxLayout, QWidget
 )
 
+from learningci.config import APP_VERSION
 from learningci.ui.data_sync_page import DataSyncPage
 from learningci.ui.history_page import HistoryPage
 from learningci.ui.parking_page import ParkingPage
@@ -40,7 +41,7 @@ class MainWindow(QMainWindow):
         side.setSpacing(6)
         title = QLabel("LearningCI")
         title.setObjectName("AppTitle")
-        sub = QLabel("能力验证系统 · v0.3.11")
+        sub = QLabel(f"能力验证系统 · v{APP_VERSION}")
         sub.setObjectName("AppSub")
         side.addWidget(title)
         side.addWidget(sub)
@@ -66,10 +67,10 @@ class MainWindow(QMainWindow):
             side.addWidget(btn)
 
         side.addStretch(1)
-        lock = QLabel("● 路线与已冻结试卷受保护")
+        lock = QLabel("● 根路线与固定试卷受保护")
         lock.setProperty("status", "info")
         side.addWidget(lock)
-        lock_sub = QLabel("plan.json 固定学习路线\n节点执行包仅在冻结前允许细化")
+        lock_sub = QLabel("plan.json 固定学习路线\n节点执行包可在节点准备中迭代覆盖")
         lock_sub.setWordWrap(True)
         lock_sub.setObjectName("AppSub")
         side.addWidget(lock_sub)
@@ -80,6 +81,12 @@ class MainWindow(QMainWindow):
         self.today.data_changed.connect(self._refresh_all)
         self.sync.data_changed.connect(self._refresh_all)
         self.prepare.data_changed.connect(self._refresh_all)
+        self.prepare.open_node.connect(self._open_learning_node)
+
+
+    def _open_learning_node(self, node: dict) -> None:
+        self.today.load_specific_node(node)
+        self._select_page(0)
 
     def _select_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)

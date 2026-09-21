@@ -43,8 +43,8 @@ def format_hours(seconds: int) -> str:
 
 BUNDLE_STATE_ZH = {
     "GENERATED": "草稿（待细化）",
-    "REVIEWED": "已审核（可冻结）",
-    "FROZEN": "已冻结",
+    "REVIEWED": "已审核（可执行）",
+    "FROZEN": "执行中（可覆盖）",
     "MISSING": "缺失",
 }
 

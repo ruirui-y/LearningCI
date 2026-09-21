@@ -25,6 +25,7 @@ class TodayPage(QWidget):
         super().__init__(parent)
         self.service = service
         self.node: dict | None = None
+        self.manual_node_mode = False
         self.selected_task_code: str | None = None
         self.selected_group_id: str | None = None
         self._refreshing_tree = False
@@ -311,10 +312,20 @@ class TodayPage(QWidget):
         self.function_edit.textChanged.connect(self._evidence_edited)
         self.evidence_note_edit.textChanged.connect(self._evidence_edited)
 
+
+    def load_specific_node(self, node: dict) -> None:
+        self.save_pending_edits()
+        self.manual_node_mode = True
+        self.node = node
+        self.selected_task_code = None
+        self.selected_group_id = None
+        self.refresh()
+
     def refresh(self) -> None:
         self.save_pending_edits()
         prev_task = self.selected_task_code
-        self.node = self.service.get_active_node()
+        if not self.manual_node_mode:
+            self.node = self.service.get_active_node()
         self.selected_task_code = None
         self.task_tree.clear()
         self.paper_tree.clear()

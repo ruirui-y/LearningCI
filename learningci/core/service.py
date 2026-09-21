@@ -12,7 +12,7 @@ from learningci.config import (
     DEFAULT_BUNDLE_DIR, MASTER_PLAN_PATH, REPO_ROOT, SYNC_DB_PATH,
 )
 from learningci.core.scoring import DEFAULT_MINIMUMS, ROUTE_PASS_SCORE, evaluate_scores
-from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_task_groups, validate_bundle
+from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_for_learning, validate_bundle
 from learningci.core.refinement_bridge import (
     analyze_refinement_structure, backup_bundle_file, build_refinement_ai_prompt,
     export_refinement_package as build_refinement_zip, install_reviewed_bundle,
@@ -342,15 +342,15 @@ class LearningService:
 
     def get_active_node(self) -> dict | None:
         row = self.db.conn.execute(
-            "SELECT * FROM nodes WHERE status != 'PASSED' AND priority != 'OPTIONAL' ORDER BY order_index LIMIT 1"
+            "SELECT * FROM nodes WHERE status NOT IN ('PASSED','SKIPPED') AND priority != 'OPTIONAL' ORDER BY order_index LIMIT 1"
         ).fetchone()
         if not row:
             return None
         node = self._decode_node(dict(row))
         state = self.get_bundle_state(node["id"])
-        # A REVIEWED package becomes immutable the first time it actually reaches the front of
-        # the mainline. GENERATED means the next level has not been prepared yet, so Today must
-        # stop instead of silently using a coarse draft.
+        # REVIEWED becomes FROZEN when it reaches the front of the mainline. FROZEN now means
+        # "entered execution" only; the child execution package may still be revised from Node
+        # Prepare while plan.json and the fixed verification paper remain protected.
         if state == "REVIEWED":
             self.freeze_node_bundle(node["id"])
             state = "FROZEN"
@@ -373,7 +373,7 @@ class LearningService:
         if not row:
             raise RuntimeError(f"node {node_id} 没有导入节点执行包")
         bundle = json.loads(row["bundle_json"])
-        normalize_bundle_task_groups(bundle)
+        normalize_bundle_for_learning(bundle)
         bundle["_bundle_hash"] = row["bundle_hash"]
         bundle["_source_path"] = row["source_path"]
         bundle["_bundle_state"] = row["bundle_state"]
@@ -417,6 +417,7 @@ class LearningService:
         return any(self.db.conn.execute(sql, params).fetchone() for sql, params in checks)
 
     def freeze_node_bundle(self, node_id: int) -> None:
+        """Mark a reviewed child package as entered execution; this does not make it immutable."""
         info = self.get_bundle_info(node_id)
         if info["state"] == "FROZEN":
             return
@@ -448,7 +449,7 @@ class LearningService:
         """只允许细化当前节点和后面两个未完成主线节点。"""
         rows = self.db.conn.execute(
             """SELECT id FROM nodes
-               WHERE status != 'PASSED' AND priority != 'OPTIONAL'
+               WHERE status NOT IN ('PASSED','SKIPPED') AND priority != 'OPTIONAL'
                ORDER BY order_index LIMIT ?""",
             (limit,),
         ).fetchall()
@@ -466,8 +467,6 @@ class LearningService:
         self._assert_in_preparation_window(node_id)
         node = self.get_node(node_id)
         info = self.get_bundle_info(node_id)
-        if info["state"] == "FROZEN" or self._node_has_runtime_data(node_id):
-            raise RuntimeError("这个节点已经冻结或已经产生学习记录，不能重新细化。")
         bundle = self.get_node_bundle(node_id)
         schema_path = REPO_ROOT / "schemas" / "节点执行包结构.json"
         return build_refinement_zip(node, bundle, self._previous_context(node), schema_path, output_path)
@@ -477,12 +476,11 @@ class LearningService:
         self._assert_in_preparation_window(node_id)
         node = self.get_node(node_id)
         info = self.get_bundle_info(node_id)
-        if info["state"] == "FROZEN" or self._node_has_runtime_data(node_id):
-            raise RuntimeError("这个节点已经冻结或已经产生学习记录，不能重新细化。")
         bundle = self.get_node_bundle(node_id)
         return build_refinement_ai_prompt(node, bundle)
 
     def _validate_refined_data(self, node: dict, data: dict) -> str:
+        normalize_bundle_for_learning(data)
         validate_bundle(data, node["node_code"])
         if str(data.get("node_title", "")).strip() != node["title"]:
             raise ValueError(
@@ -498,8 +496,6 @@ class LearningService:
         self._assert_in_preparation_window(node_id)
         node = self.get_node(node_id)
         info = self.get_bundle_info(node_id)
-        if info["state"] == "FROZEN" or self._node_has_runtime_data(node_id):
-            raise RuntimeError("这个节点已经冻结或已经产生学习记录，不能覆盖执行包。")
         old_bundle = self.get_node_bundle(node_id)
         data, staged = stage_candidate_file(Path(source_path), node["node_code"])
         paper_id = self._validate_refined_data(node, data)
@@ -522,19 +518,20 @@ class LearningService:
             "structure_warnings": structure["warnings"],
             "recommended_task_range": structure["recommended_task_range"],
             "old_state": info["state"],
-            "new_state": "REVIEWED",
+            "new_state": "FROZEN" if info["state"] == "FROZEN" else "REVIEWED",
             "next_revision": int(info["revision"] or 1) + 1,
+            "added_task_ids": structure.get("added_task_ids", []),
+            "removed_task_ids": structure.get("removed_task_ids", []),
+            "modified_task_ids": structure.get("modified_task_ids", []),
             "staged_path": str(staged),
             "paper_id": paper_id,
         }
 
     def apply_refined_bundle(self, node_id: int, staged_path: Path) -> dict:
-        """用户确认后，把待审核执行包替换为正式执行包。"""
+        """Replace a child execution package while preserving compatible learning evidence."""
         self._assert_in_preparation_window(node_id)
         node = self.get_node(node_id)
         info = self.get_bundle_info(node_id)
-        if info["state"] == "FROZEN" or self._node_has_runtime_data(node_id):
-            raise RuntimeError("这个节点已经冻结或已经产生学习记录，不能覆盖执行包。")
         old_bundle = self.get_node_bundle(node_id)
         data = json.loads(Path(staged_path).read_text(encoding="utf-8"))
         paper_id = self._validate_refined_data(node, data)
@@ -545,9 +542,31 @@ class LearningService:
             )
         backup = backup_bundle_file(node["node_code"], info["revision"])
         installed = install_reviewed_bundle(node["node_code"], data)
-        self.db.conn.execute("DELETE FROM leaf_task_progress WHERE node_id=?", (node_id,))
-        self.db.conn.commit()
         ensure_bundles_imported(self.db, DEFAULT_BUNDLE_DIR)
+
+        # Child execution packages are mutable. Preserve evidence for unchanged task ids,
+        # add rows for new tasks, and only reopen tasks whose definition actually changed.
+        modified_task_ids = structure.get("modified_task_ids", [])
+        if modified_task_ids:
+            now = now_iso()
+            with self.db.transaction() as conn:
+                for task_code in modified_task_ids:
+                    conn.execute(
+                        """UPDATE leaf_task_progress
+                           SET completed=0, completed_at=NULL, updated_at=?
+                           WHERE node_id=? AND task_code=?""",
+                        (now, node_id, task_code),
+                    )
+        self.ensure_leaf_task_rows(node_id)
+
+        # FROZEN now means "already entered execution", not "immutable child plan".
+        # Keep that runtime state after an in-place revision so Today can continue immediately.
+        if info["state"] == "FROZEN":
+            self.db.conn.execute(
+                "UPDATE node_bundles SET bundle_state='FROZEN',updated_at=? WHERE node_id=?",
+                (now_iso(), node_id),
+            )
+            self.db.conn.commit()
         new_info = self.get_bundle_info(node_id)
         return {
             "node_code": node["node_code"],
@@ -567,12 +586,33 @@ class LearningService:
         preview = self.preview_refined_bundle(node_id, source_path)
         return self.apply_refined_bundle(node_id, Path(preview["staged_path"]))
 
+
+    def skip_node(self, node_id: int, reason: str = "用户确认跳过 Recovery 节点") -> None:
+        """仅允许跳过当前主线节点；SKIPPED 与 PASSED 一样参与路线推进。"""
+        active = self.db.conn.execute(
+            """SELECT id,node_code FROM nodes
+               WHERE status NOT IN ('PASSED','SKIPPED') AND priority != 'OPTIONAL'
+               ORDER BY order_index LIMIT 1"""
+        ).fetchone()
+        if not active:
+            raise RuntimeError("当前没有可跳过的主线节点。")
+        if int(active["id"]) != int(node_id):
+            node = self.get_node(node_id)
+            raise RuntimeError(
+                f"只能跳过当前主线节点。当前节点是 {active['node_code']}，不能直接跳过 {node['node_code']}。"
+            )
+        with self.db.transaction() as conn:
+            conn.execute(
+                "UPDATE nodes SET status='SKIPPED', updated_at=? WHERE id=?",
+                (now_iso(), node_id),
+            )
+
     def list_preparation_nodes(self) -> list[dict]:
         nodes = self.list_nodes()
         active_code = None
         window_ids = self._preparation_window_ids()
         for n in nodes:
-            if n["priority"] != "OPTIONAL" and n["status"] != "PASSED":
+            if n["priority"] != "OPTIONAL" and n["status"] not in {"PASSED", "SKIPPED"}:
                 active_code = n["node_code"]
                 break
         out = []
@@ -593,6 +633,8 @@ class LearningService:
             row["in_prepare_window"] = node["id"] in window_ids
             if node["status"] == "PASSED":
                 learning_state = "PASSED"
+            elif node["status"] == "SKIPPED":
+                learning_state = "SKIPPED"
             elif node["node_code"] == active_code:
                 learning_state = "CURRENT" if info["state"] in {"REVIEWED", "FROZEN"} else "PREP_REQUIRED"
             elif node["priority"] == "OPTIONAL":
@@ -1671,7 +1713,7 @@ class LearningService:
         # and re-import the current frozen plan/bundles after restore.
         self.db.initialize()
         from learningci.config import DEFAULT_BUNDLE_DIR, DEFAULT_PLAN_PATH
-        from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_task_groups, validate_bundle
+        from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_for_learning, validate_bundle
         from learningci.core.plan_loader import ensure_plan_imported
         ensure_plan_imported(self.db, DEFAULT_PLAN_PATH)
         ensure_bundles_imported(self.db, DEFAULT_BUNDLE_DIR)

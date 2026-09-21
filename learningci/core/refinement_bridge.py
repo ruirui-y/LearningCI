@@ -14,7 +14,7 @@ from learningci.config import (
     REFINE_PROPOSED_DIR,
     REPO_ROOT,
 )
-from learningci.core.bundle_loader import normalize_bundle_task_groups, task_group_items, validate_bundle
+from learningci.core.bundle_loader import normalize_bundle_for_learning, task_group_items, validate_bundle
 
 
 def _now_stamp() -> str:
@@ -44,6 +44,50 @@ PROTECTED_REFINEMENT_FIELDS = (
 )
 
 
+def _is_implementation_node(node: dict) -> bool:
+    """Stage 1+ is the code-execution zone; Stage 0 remains recovery/audit/setup."""
+    try:
+        return int(node.get("stage", 0)) >= 1
+    except (TypeError, ValueError):
+        return False
+
+
+def _implementation_rules(node: dict) -> str:
+    if not _is_implementation_node(node):
+        return ""
+    return f"""
+
+【实现型节点硬规则】
+当前 Node `{node['node_code']}` 已进入 Stage {node['stage']}，属于代码实现节点，不是历史审计节点。
+- 第一组第一个实质叶子任务必须产生真实工程修改并能编译/运行验证；不能把“定位/阅读/追踪/确认旧源码”作为主要成果。
+- 阅读旧实现只能作为某个 coding task 的辅助步骤，禁止大量独立生成“定位、追踪、确认”类叶子任务。
+- 任务组织优先采用：实现 → 编译 → 运行/测试 → 日志/strace/故障诊断 → 修复/再验证。
+- 至少 60% 的叶子任务必须产生一种真实工程结果：新增/修改 C++ 代码、编译通过、测试通过、运行日志、strace/故障实验或 bug 修复。
+- `project_anchor` 表示本节点主要写入/验证的工程位置，不是单纯阅读位置。
+- Recovery Zone 的“恢复”是快速把已有能力写回新工程，不是再次审计旧项目。
+- 禁止生成 `gate` / `验收准备` 任务组；是否具备正式验收条件由 LearningCI 自动检查。
+"""
+
+def _task_signature(task: dict) -> str:
+    payload = {
+        key: task.get(key)
+        for key in (
+            "title", "detail", "purpose", "estimated_minutes", "required",
+            "evidence_required", "evidence_fields", "done_when"
+        )
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+def _task_map(bundle: dict) -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    for group in bundle.get("task_groups", []) or []:
+        for task in task_group_items(group):
+            task_id = str(task.get("id", "")).strip()
+            if task_id:
+                result[task_id] = task
+    return result
+
+
 def _task_count(bundle: dict) -> int:
     return sum(len(task_group_items(group)) for group in bundle.get("task_groups", []) or [])
 
@@ -58,13 +102,17 @@ def _group_outline(bundle: dict) -> str:
 
 
 def analyze_refinement_structure(original: dict, candidate: dict) -> dict:
-    """Compare a refinement with the current bundle's section boundaries.
+    """Compare a candidate with the current child execution package.
 
-    Existing task-group ids are stable section boundaries because section assessment
-    is keyed by group id. AI may split a group into additional groups, but it must not
-    remove/merge existing groups. Task-count guidance is advisory: coverage matters
-    more than hitting a number, while 20-30 is the normal target.
+    The root route contract stays immutable, but child bundles are versioned and may
+    evolve. Existing technical section ids remain stable, except the legacy system-only
+    ``gate`` group which is deliberately removed.
     """
+    original = json.loads(json.dumps(original, ensure_ascii=False))
+    candidate = json.loads(json.dumps(candidate, ensure_ascii=False))
+    normalize_bundle_for_learning(original)
+    normalize_bundle_for_learning(candidate)
+
     old_groups = original.get("task_groups", []) or []
     new_groups = candidate.get("task_groups", []) or []
     old_ids = [str(group.get("id", "")).strip() for group in old_groups]
@@ -86,20 +134,24 @@ def analyze_refinement_structure(original: dict, candidate: dict) -> dict:
             + ", ".join(changed_protected)
         )
 
-    if len(new_groups) < len(old_groups):
-        errors.append(
-            f"禁止合并既有任务组：当前执行包 {len(old_groups)} 组，导入结果只有 {len(new_groups)} 组。"
-            "任务组是小节验收边界，只允许保留或进一步拆分。"
-        )
     if missing_ids:
         errors.append(
-            "导入结果删除了既有任务组 ID：" + ", ".join(missing_ids) +
-            "。请保留这些任务组及其技术语义；需要细分时新增子主题组，不要覆盖原组。"
+            "导入结果删除了既有技术任务组 ID：" + ", ".join(missing_ids) +
+            "。技术任务组是小节验收边界；系统只会自动移除 legacy gate/验收准备。"
         )
     if len(new_groups) > len(old_groups):
         warnings.append(
             f"任务组从 {len(old_groups)} 增加到 {len(new_groups)}；允许合理拆分，请确认新增组确实代表独立技术小节。"
         )
+
+    old_map = _task_map(original)
+    new_map = _task_map(candidate)
+    added_task_ids = [task_id for task_id in new_map if task_id not in old_map]
+    removed_task_ids = [task_id for task_id in old_map if task_id not in new_map]
+    modified_task_ids = [
+        task_id for task_id in new_map
+        if task_id in old_map and _task_signature(new_map[task_id]) != _task_signature(old_map[task_id])
+    ]
 
     if new_tasks < RECOMMENDED_LEAF_TASK_MIN or new_tasks > RECOMMENDED_LEAF_TASK_MAX:
         warnings.append(
@@ -133,6 +185,9 @@ def analyze_refinement_structure(original: dict, candidate: dict) -> dict:
         "old_tasks": old_tasks,
         "new_tasks": new_tasks,
         "missing_group_ids": missing_ids,
+        "added_task_ids": added_task_ids,
+        "removed_task_ids": removed_task_ids,
+        "modified_task_ids": modified_task_ids,
         "errors": errors,
         "warnings": warnings,
         "recommended_task_range": [RECOMMENDED_LEAF_TASK_MIN, RECOMMENDED_LEAF_TASK_MAX],
@@ -153,22 +208,26 @@ def build_refinement_ai_prompt(node: dict, bundle: dict) -> str:
 - `04-返回文件结构约束.json`：机器导入约束
 
 你的任务：严格按 ZIP 内规则细化 `{node['node_code']}`。
+{_implementation_rules(node)}
+最终交付方式（必须遵守）：
+1. 最终产物必须创建为一个可下载的 JSON 文件，文件名必须是 `{node['node_code']}-refined.json`。
+2. 聊天正文不要粘贴 JSON 内容，不要输出 Markdown fence，不要解释，不要给第二份方案；生成文件后，正文只返回该 JSON 文件的下载链接。
+3. JSON 文件内部必须且只能包含一个合法 JSON 对象，不得混入注释、说明文字或 Markdown。
 
-返回前必须同时满足以下硬约束：
-1. 只返回 **一个合法 JSON 对象**；不要 Markdown fence，不要解释，不要第二份方案。
-2. `node_id` 必须是 `{node['node_code']}`，`node_title` 必须保持为 `{node['title']}`。
-3. 以 `03-当前节点执行包.json` 为结构骨架。除 `task_groups`、`task_count`、`compiler` 外，其余已有顶层字段必须原样复制，不能删除或改写。
-4. 叶子任务必须使用规范字段 `task_groups[].items[]`；不要输出 `leaf_tasks` 或 `tasks`。
-5. 必须保留 03 中所有既有 `task_group.id` 及其技术语义；禁止合并、删除或改名。允许为了独立技术小节新增任务组。
-6. 单节点通常细化到 **20~30 个高质量叶子任务**；15~35 是弹性范围。覆盖完整优先，禁止用重复总结、重复抄文档凑数量。
-7. `must_learn` 每一项都必须被至少一个叶子任务显式覆盖，并能通过 `done_when` 与证据字段验证。
-8. `task_count` 必须等于全部 `task_groups[].items[]` 的实际数量。
-9. `compiler.status` 必须是 `REVIEWED`。
-10. `verification_paper`、`task_policy`、`retest_policy` 等稳定字段必须从 `03-当前节点执行包.json` **原样复制**。当前固定试卷标识为 `{paper_id}`，version={paper_version}；不得改题、改 ID、改版本。
-11. 不得修改冻结 Node 定义、Stage、Priority、capability、must_learn、out_of_scope、project_anchor 或评分门槛。
-12. 输出前请自行对照 `04-返回文件结构约束.json` 做一次结构自检，再返回最终 JSON。
+返回文件内容还必须同时满足以下硬约束：
+4. `node_id` 必须是 `{node['node_code']}`，`node_title` 必须保持为 `{node['title']}`。
+5. 以 `03-当前节点执行包.json` 为结构骨架。除 `task_groups`、`task_count`、`compiler` 外，其余已有顶层字段必须原样复制，不能删除或改写。
+6. 叶子任务必须使用规范字段 `task_groups[].items[]`；不要输出 `leaf_tasks` 或 `tasks`。
+7. 必须保留 03 中所有既有技术 `task_group.id` 及其技术语义；禁止合并、删除或改名。`gate` / `验收准备` 属于系统流程任务，禁止生成；允许为了独立技术小节新增任务组。
+8. 单节点通常细化到 **20~30 个高质量叶子任务**；15~35 是弹性范围。覆盖完整优先，禁止用重复总结、重复抄文档凑数量。
+9. `must_learn` 每一项都必须被至少一个叶子任务显式覆盖，并能通过 `done_when` 与证据字段验证。
+10. `task_count` 必须等于全部 `task_groups[].items[]` 的实际数量。
+11. `compiler.status` 必须是 `REVIEWED`。
+12. `verification_paper`、`task_policy`、`retest_policy` 等稳定字段必须从 `03-当前节点执行包.json` **原样复制**。当前固定试卷标识为 `{paper_id}`，version={paper_version}；不得改题、改 ID、改版本。
+13. 不得修改冻结 Node 定义、Stage、Priority、capability、must_learn、out_of_scope、project_anchor 或评分门槛。
+14. 输出前请自行对照 `04-返回文件结构约束.json` 做一次结构自检，再生成最终 JSON 文件。
 
-不要向我提问，也不要先给方案。直接读取 ZIP 后输出最终 JSON。
+不要向我提问，也不要先给方案。直接读取 ZIP，生成 `{node['node_code']}-refined.json` 文件，并只返回该文件的下载链接。
 """
 
 
@@ -190,7 +249,7 @@ def _request_text(node: dict, bundle: dict) -> str:
 能力定义：
 
 > {node['capability']}
-
+{_implementation_rules(node)}
 ## 绝对禁止修改的内容
 
 以下内容来自 `plan.json`，属于路线合同：
@@ -229,7 +288,7 @@ def _request_text(node: dict, bundle: dict) -> str:
 12. **禁止为了“收束”再增加重复总结任务。** 如果前面的叶子任务已经逐项回答并留下证据，不要再要求“形成审计结论 / 再写一遍总结 / 把上面内容重新归纳到文档”。
 13. 每个有实际学习内容的任务组应当可以直接用其叶子任务回答与证据进行“小节 AI 验收”。任务组可写 `assessment_required: true`；LearningCI 会把整个小节的现有记录导出给 ChatGPT 打分。
 14. 如果项目确实需要长期资产文档，优先由已有叶子证据自动汇总或在最终项目阶段生成，不要把重复抄写当成学习任务。
-15. **任务组是稳定的小节验收边界，禁止把多个既有 task_group 合并成一个大组。** 必须保留当前所有 task_group 的 `id` 与核心技术语义；如果确实需要更细，可以新增任务组，但不能删除既有组。
+15. **技术任务组是稳定的小节验收边界，禁止把多个既有 task_group 合并成一个大组。** 必须保留当前所有技术 task_group 的 `id` 与核心技术语义；如果确实需要更细，可以新增任务组。`gate` / `验收准备` 是系统流程任务，禁止生成。
 16. 每个任务组应围绕一个可独立验收的技术主题组织叶子任务。不要建立 `rpc_history_audit` / `all_tasks` 之类把所有主题重新塞回一个大组的总括组。
 17. 单节点通常建议 **20~30 个高质量叶子任务**。15~35 只作为合理弹性范围；不要为了凑数量制造重复总结，也不要为了减少数量把多个机制压成一个任务。
 18. `must_learn` 中的每一项都必须至少由一个叶子任务显式覆盖，并且能通过 `done_when` 和证据字段判断是否真正掌握。输出前自行核对覆盖完整性，但不要额外生成“覆盖检查/总结”任务。
@@ -241,7 +300,9 @@ def _request_text(node: dict, bundle: dict) -> str:
 
 ## 输出要求
 
-只返回一个合法 JSON，结构必须符合 `04-返回文件结构约束.json`。
+最终产物必须是一个可下载的 JSON 文件，文件名固定为 `{node['node_code']}-refined.json`。
+聊天正文不要粘贴 JSON；生成完成后只返回文件下载链接。
+文件内部必须且只能包含一个合法 JSON 对象，结构必须符合 `04-返回文件结构约束.json`。
 
 - `node_id` 必须仍为 `{node['node_code']}`
 - `node_title` 必须仍为 `{node['title']}`
@@ -250,7 +311,7 @@ def _request_text(node: dict, bundle: dict) -> str:
 - `verification_paper` 必须原样保留当前执行包中的固定试卷，不得修改 ID、版本或题目
 - 规范叶子任务字段必须是 `task_groups[].items[]`
 - `task_count` 必须与实际叶子任务数严格一致
-- 不要附带 Markdown fence，不要解释，不要输出第二份方案。
+- JSON 文件内部不要附带 Markdown fence、解释或第二份方案；聊天正文只返回该文件下载链接。
 
 ## 当前粗执行包状态
 
@@ -258,11 +319,11 @@ def _request_text(node: dict, bundle: dict) -> str:
 当前叶子任务数量：{bundle.get('task_count', 0)}
 当前执行包质量状态：{bundle.get('compiler', {}).get('status', 'GENERATED')}
 
-当前任务组边界（必须保留这些 ID，不得合并删除）：
+当前技术任务组边界（必须保留这些 ID，不得合并删除；不会包含 legacy gate/验收准备）：
 
 {_group_outline(bundle)}
 
-你可以保留、细化、拆分合理任务，也可以新增新的技术任务组；但不能合并/删除既有任务组，不能改变节点本身。
+你可以保留、细化、拆分合理任务，也可以新增新的技术任务组；不能合并/删除既有技术任务组，不能改变节点本身。禁止生成 gate/验收准备。
 """
 
 
@@ -305,13 +366,14 @@ def export_refinement_package(
 
     clean_bundle = {k: v for k, v in bundle.items() if not str(k).startswith("_")}
     clean_bundle = json.loads(json.dumps(clean_bundle, ensure_ascii=False))
+    normalize_bundle_for_learning(clean_bundle)
     clean_bundle.setdefault("compiler", {})["note"] = (
         "这是 LearningCI 自动生成的基础执行包。接近执行窗口时通过导出/导入方式交给 ChatGPT 单节点细化；"
         "不使用任何模型 API，不允许改变 plan.json 路线。"
     )
     files: dict[str, str] = {
-        "00-复制给AI的提示词.txt": build_refinement_ai_prompt(node, bundle),
-        "01-节点细化要求.md": _request_text(node, bundle),
+        "00-复制给AI的提示词.txt": build_refinement_ai_prompt(node, clean_bundle),
+        "01-节点细化要求.md": _request_text(node, clean_bundle),
         "02-当前节点定义_禁止修改.json": _json_text(node_contract),
         "03-当前节点执行包.json": _json_text(clean_bundle),
         "04-返回文件结构约束.json": schema_text if schema_text.endswith("\n") else schema_text + "\n",
@@ -320,16 +382,19 @@ def export_refinement_package(
         "07-项目背景与求职证据.md": _project_background_text(),
         "08-返回文件说明.txt": (
             "LearningCI 导出本 ZIP 时，会同时把 `00-复制给AI的提示词.txt` 的内容复制到系统剪贴板。\n"
-            "正确流程：① 上传这个 ZIP；② 直接粘贴剪贴板提示词并发送；③ AI 只返回一个 JSON；"
-            "④ 保存为 " f"{node['node_code']}_已细化.json；⑤ 回到节点准备页面导入。\n"
+            "正确流程：① 上传这个 ZIP；② 直接粘贴剪贴板提示词并发送；③ AI 创建并返回可下载文件 "
+            f"{node['node_code']}-refined.json；④ 下载该 JSON 文件；⑤ 回到节点准备页面直接导入。\n"
             "如果剪贴板内容丢失，直接打开 ZIP 内的 00-复制给AI的提示词.txt 重新复制即可。\n"
-            "不要手工覆盖 plan.json；不要手工修改已经冻结的节点执行包。\n"
+            "plan.json 是唯一不可覆盖的根路线合同；节点执行包属于可迭代子计划，统一通过本页导入新版本覆盖。\n"
         ),
         "09-生成前自检清单.md": (
             "# AI 返回前自检清单\n\n"
-            "- [ ] 只输出一个合法 JSON 对象，没有 Markdown fence。\n"
+            f"- [ ] 已创建 `{node['node_code']}-refined.json` 可下载文件。\n"
+            "- [ ] 聊天正文没有粘贴 JSON，只返回文件下载链接。\n"
+            "- [ ] JSON 文件内部只有一个合法 JSON 对象，没有 Markdown fence/解释文字。\n"
             f"- [ ] node_id = `{node['node_code']}`，node_title 未修改。\n"
-            "- [ ] 完整保留 03 中所有既有 task_group.id，没有合并/删除/改名。\n"
+            "- [ ] 完整保留 03 中所有既有技术 task_group.id，没有合并/删除/改名。\n"
+            "- [ ] 没有生成 gate / 验收准备任务组。\n"
             "- [ ] 叶子任务统一位于 task_groups[].items[]。\n"
             "- [ ] task_count 等于实际 items 总数。\n"
             "- [ ] must_learn 全覆盖，没有靠重复总结任务凑数量。\n"
@@ -346,8 +411,7 @@ def export_refinement_package(
 def stage_candidate_file(source: Path, node_code: str) -> tuple[dict, Path]:
     raw = Path(source).read_text(encoding="utf-8")
     data = json.loads(raw)
-    validate_bundle(data, node_code)
-    normalize_bundle_task_groups(data)
+    normalize_bundle_for_learning(data)
     validate_bundle(data, node_code)
     if str(data.get("node_title", "")).strip() == "":
         raise ValueError("导入结果缺少 node_title")
@@ -373,7 +437,7 @@ def backup_bundle_file(node_code: str, revision: int) -> Path | None:
 
 
 def install_reviewed_bundle(node_code: str, data: dict) -> Path:
-    normalize_bundle_task_groups(data)
+    normalize_bundle_for_learning(data)
     validate_bundle(data, node_code)
     target = DEFAULT_BUNDLE_DIR / f"{node_code}.json"
     target.write_text(_json_text(data), encoding="utf-8")
