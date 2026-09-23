@@ -15,6 +15,10 @@ DEFAULT_BUNDLE_DIR = PLAN_DIR / "节点执行包"
 MASTER_PLAN_PATH = PLAN_DIR / "NebulaRPC总计划.md"
 REFINE_EXPORT_DIR = PLAN_DIR / "导出" / "节点细化"
 REFINE_PROPOSED_DIR = PLAN_DIR / "待审核"
+# 试卷工作台的本地文件目录。导出件是给 AI 评分的临时产物，因此放在 gitignore 的 data/ 下。
+STUDIO_DIR = DATA_DIR / "试卷工作台"
+STUDIO_EXPORT_DIR = STUDIO_DIR / "导出"
+STUDIO_IMPORT_DIR = STUDIO_DIR / "导入"
 APP_NAME = "LearningCI"
 APP_VERSION = "0.4.0"
 
@@ -25,6 +29,8 @@ def ensure_dirs() -> None:
     DEFAULT_BUNDLE_DIR.mkdir(parents=True, exist_ok=True)
     REFINE_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     REFINE_PROPOSED_DIR.mkdir(parents=True, exist_ok=True)
+    STUDIO_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    STUDIO_IMPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def prepare_local_database() -> bool:

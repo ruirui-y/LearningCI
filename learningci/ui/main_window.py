@@ -9,6 +9,7 @@ from learningci.config import APP_VERSION
 from learningci.ui.data_sync_page import DataSyncPage
 from learningci.ui.history_page import HistoryPage
 from learningci.ui.parking_page import ParkingPage
+from learningci.ui.paper_studio_page import PaperStudioPage
 from learningci.ui.plan_page import PlanPage
 from learningci.ui.node_prepare_page import NodePreparePage
 from learningci.ui.reviews_page import ReviewsPage
@@ -51,12 +52,16 @@ class MainWindow(QMainWindow):
         self.today = TodayPage(self.service)
         self.plan = PlanPage(self.service)
         self.prepare = NodePreparePage(self.service)
+        self.studio = PaperStudioPage(self.service)
         self.reviews = ReviewsPage(self.service)
         self.history = HistoryPage(self.service)
         self.parking = ParkingPage(self.service)
         self.sync = DataSyncPage(self.service)
-        self.pages = [self.today, self.plan, self.prepare, self.reviews, self.history, self.parking, self.sync]
-        labels = ["今日学习", "冻结计划", "节点准备", "复测队列", "学习统计", "想法停车场", "数据同步"]
+        self.pages = [
+            self.today, self.plan, self.prepare, self.studio,
+            self.reviews, self.history, self.parking, self.sync,
+        ]
+        labels = ["今日学习", "冻结计划", "节点准备", "试卷工作台", "复测队列", "学习统计", "想法停车场", "数据同步"]
         for index, (label, page) in enumerate(zip(labels, self.pages)):
             self.stack.addWidget(page)
             btn = QPushButton(label)
@@ -117,4 +122,18 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             self.service.end_focus()
+        elif self.studio.has_open_attempt():
+            # 试卷作答的用时按 started_at 实时计算，关掉窗口时间照走，
+            # 所以这里必须提醒，不能静默退出。
+            reply = QMessageBox.question(
+                self,
+                "试卷作答仍在进行",
+                "试卷工作台里还有一次作答没有交卷。用时是按开始作答时间实时计算的，"
+                "关闭窗口后计时不会停。\n\n现在关闭？下次打开可以继续作答。",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
         event.accept()

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_SQL = r"""
 PRAGMA foreign_keys = ON;
@@ -204,6 +204,46 @@ CREATE TABLE IF NOT EXISTS parking_lot (
     status TEXT NOT NULL DEFAULT 'PENDING',
     created_at TEXT NOT NULL,
     reviewed_at TEXT
+);
+
+-- v0.4.0: 试卷工作台。与冻结验收流程完全隔离：冻结试卷受 SHA-256 保护且绑定主线推进，
+-- 而这套表只服务“自己出题 -> 限时闭卷作答 -> 交 AI 评分 -> 回收错题”的独立链路。
+CREATE TABLE IF NOT EXISTS studio_papers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_code TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    paper_hash TEXT NOT NULL,
+    paper_json TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'IMPORT',
+    source_path TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS studio_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_id INTEGER NOT NULL REFERENCES studio_papers(id) ON DELETE CASCADE,
+    attempt_no INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    started_at TEXT NOT NULL,
+    submitted_at TEXT,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    answers_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    UNIQUE(paper_id, attempt_no)
+);
+CREATE INDEX IF NOT EXISTS idx_studio_attempts_paper ON studio_attempts(paper_id, attempt_no);
+
+CREATE TABLE IF NOT EXISTS studio_grades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    attempt_id INTEGER NOT NULL UNIQUE REFERENCES studio_attempts(id) ON DELETE CASCADE,
+    paper_id INTEGER NOT NULL REFERENCES studio_papers(id) ON DELETE CASCADE,
+    score REAL NOT NULL,
+    max_score REAL NOT NULL,
+    percent REAL NOT NULL,
+    scores_json TEXT NOT NULL DEFAULT '{}',
+    issues_json TEXT NOT NULL DEFAULT '[]',
+    summary TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
 );
 """
 

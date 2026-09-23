@@ -12,6 +12,7 @@ from learningci.config import (
     DEFAULT_BUNDLE_DIR, MASTER_PLAN_PATH, REPO_ROOT, SYNC_DB_PATH,
 )
 from learningci.core.scoring import DEFAULT_MINIMUMS, ROUTE_PASS_SCORE, evaluate_scores
+from learningci.core.paper_studio import PaperStudio
 from learningci.core.bundle_loader import ensure_bundles_imported, normalize_bundle_for_learning, validate_bundle
 from learningci.core.refinement_bridge import (
     analyze_refinement_structure, backup_bundle_file, build_refinement_ai_prompt,
@@ -245,6 +246,9 @@ def _extract_markdown_numbered_section(markdown: str, ref: str) -> dict | None:
 class LearningService:
     def __init__(self, db: Database):
         self.db = db
+        # v0.4.0: 试卷工作台与冻结验收流程共用同一个数据库连接，但使用独立的表，
+        # 因此不会影响固定试卷、五维评分与主线推进。
+        self.studio = PaperStudio(db)
         # v0.3.11: older builds used 80 + per-dimension hard gates for mainline
         # progression. Reconcile existing 70+ initial verification scores once so
         # upgrading the app immediately unlocks the next node without forcing the

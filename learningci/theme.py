@@ -390,6 +390,27 @@ def build_qss() -> str:
         background: transparent;
     }}
 
+    QListWidget#StudioPaperList {{
+        background-color: {CARD_BG_ALT};
+        color: {TEXT_PRIMARY};
+        border: 1px solid {BORDER};
+        border-radius: 8px;
+        outline: 0;
+        padding: 4px;
+    }}
+    QListWidget#StudioPaperList::item {{
+        padding: 8px 6px;
+        border-radius: 6px;
+        border-bottom: 1px solid #202630;
+    }}
+    QListWidget#StudioPaperList::item:hover {{
+        background-color: #222A35;
+    }}
+    QListWidget#StudioPaperList::item:selected {{
+        background-color: {SELECTION};
+        color: {TEXT_PRIMARY};
+    }}
+
     QToolTip {{ background-color: {CARD_BG_ALT}; color: {TEXT_PRIMARY}; border: 1px solid {BORDER}; padding: 4px 6px; }}
     QMessageBox {{ background-color: {CARD_BG}; }}
     """
