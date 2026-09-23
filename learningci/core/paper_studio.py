@@ -731,7 +731,6 @@ class PaperStudio:
         stored = self.get_grade(int(attempt_id))
         if stored is None:
             raise PaperStudioError("评分写入后读取失败")
-        stored["scores_complete"] = bool(grade["scores_complete"])
         return stored
 
     def get_grade(self, attempt_id: int) -> dict[str, object] | None:
@@ -749,7 +748,17 @@ class PaperStudio:
             view["issues"] = json.loads(view.get("issues_json") or "[]")
         except json.JSONDecodeError:
             view["issues"] = []
+        # scores_complete 是算出来的而不是存下来的：它同时依赖试卷的题数和本次逐题得分，
+        # 存一份就一定会出现“试卷改了但标记没改”的漂移。
+        view["scores_complete"] = self._scores_complete(int(view["paper_id"]), view["scores"])
         return view
+
+    def _scores_complete(self, paper_id: int, scores: object) -> bool:
+        per_question = scores.get("per_question") if isinstance(scores, dict) else None
+        if not isinstance(per_question, dict) or not per_question:
+            return False
+        questions = paper_questions(self.get_paper(paper_id) or {})
+        return len(per_question) == len(questions)
 
     def get_grade_for_paper(self, paper_id: int) -> dict[str, object] | None:
         attempt = self.latest_attempt(paper_id)

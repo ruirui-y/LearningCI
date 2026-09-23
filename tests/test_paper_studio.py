@@ -260,6 +260,25 @@ class PaperStudioTests(unittest.TestCase):
         with self.assertRaises(PaperStudioError):
             self.studio.build_report(attempt["id"])
 
+    def test_complete_scores_do_not_warn_in_report(self):
+        """逐题得分齐全时报告不能提示“评分不完整”。"""
+        attempt = self.studio.start_attempt(self.paper["id"])
+        self.studio.submit_attempt(attempt["id"], {"q1": "a", "q2": "b"})
+        self.studio.import_grade(attempt["id"], {"scores": {"q1": 60, "q2": 40}})
+
+        grade = self.studio.get_grade(attempt["id"])
+        self.assertTrue(grade["scores_complete"])
+        self.assertNotIn("评分没有覆盖全部题目", self.studio.build_report(attempt["id"]))
+
+    def test_partial_scores_warn_in_report(self):
+        attempt = self.studio.start_attempt(self.paper["id"])
+        self.studio.submit_attempt(attempt["id"], {"q1": "a", "q2": "b"})
+        self.studio.import_grade(attempt["id"], {"total": 40})
+
+        grade = self.studio.get_grade(attempt["id"])
+        self.assertFalse(grade["scores_complete"])
+        self.assertIn("评分没有覆盖全部题目", self.studio.build_report(attempt["id"]))
+
     def test_delete_paper_cascades(self):
         attempt = self.studio.start_attempt(self.paper["id"])
         self.studio.submit_attempt(attempt["id"], {"q1": "a"})
