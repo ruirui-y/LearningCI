@@ -27,6 +27,9 @@ data/
 !sync/learningci.db
 !sync/说明.md
 
+# 本地工作目录（Agent 记忆与临时文件）
+.workbuddy/
+
 # Logs
 logs/
 *.log
