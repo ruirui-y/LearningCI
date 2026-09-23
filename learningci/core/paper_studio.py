@@ -15,6 +15,9 @@ LearningCI 原本的固定试卷（`assessment_papers`）受 SHA-256 冻结保�
 2. 试卷自带的标准答案与“给 AI 的评分请求”严格分离：评分请求里**永远不含**标准答案，
    标准答案要等交卷后才在本地解锁，避免自己作弊。
 3. 导入评分对 AI 的输出宽容：逐题给分、按维度给分、只给总分三种形态都能接。
+4. 作答有“继承”语义：`start_attempt(inherit=True)`（开始作答）把上一份**有内容**的作答
+   逐字带进新记录，只有 `inherit=False`（重新作答）才是空白。空白作答没有信息量，还会
+   干扰“下一份该从哪一份长出来”，所以在试卷被选中时统一清掉。
 """
 
 from __future__ import annotations
@@ -108,6 +111,13 @@ def _text(value: object) -> str:
 def _dimension_zh(dimension: object) -> str:
     key = _text(dimension)
     return DIMENSION_ZH.get(key, key or "-")
+
+
+def answers_are_blank(answers: object) -> bool:
+    """判断一份作答是否“一字未写”。非字典与空字典一律算空白。"""
+    if not isinstance(answers, dict):
+        return True
+    return not any(_text(value) for value in answers.values())
 
 
 # --------------------------------------------------------------------------- #
@@ -401,15 +411,29 @@ class PaperStudio:
 
     # ---------------------------------------------------------------- 作答
 
-    def start_attempt(self, paper_id: int) -> dict[str, object]:
-        """开始一次新作答。已存在未交卷的作答时直接复用它，避免计时被无意义地重置。"""
+    def start_attempt(self, paper_id: int, *, inherit: bool = True) -> dict[str, object]:
+        """开始一次新作答。
+
+        `inherit=True`（开始作答）：新记录直接以上一份**有内容**的作答为底稿，答案逐字
+        带过来继续改；找不到有内容的历史时才从空白开始。
+        `inherit=False`（重新作答）：从空白开始。
+
+        两种情况都遵守同一条：已存在未交卷的作答时直接复用它。否则一次误点就会把正在写的
+        内容抹掉，计时也会被重置。
+        """
         open_attempt = self.open_attempt(paper_id)
         if open_attempt is not None:
             return open_attempt
 
         paper_id = int(paper_id)
-        now = now_iso()
 
+        seed: dict[str, str] = {}
+        if inherit:
+            source = self.latest_answered_attempt(paper_id)
+            if source is not None:
+                seed = {str(key): str(value) for key, value in dict(source["answers"]).items()}
+
+        now = now_iso()
         with self.db.transaction() as conn:
             next_no = int(conn.execute(
                 "SELECT COALESCE(MAX(attempt_no),0)+1 FROM studio_attempts WHERE paper_id=?",
@@ -418,7 +442,7 @@ class PaperStudio:
             cursor = conn.execute(
                 """INSERT INTO studio_attempts(paper_id,attempt_no,status,started_at,answers_json,created_at)
                    VALUES(?,?,?,?,?,?)""",
-                (paper_id, next_no, ATTEMPT_OPEN, now, "{}", now),
+                (paper_id, next_no, ATTEMPT_OPEN, now, json.dumps(seed, ensure_ascii=False), now),
             )
             attempt_id = int(cursor.lastrowid)
 
@@ -442,6 +466,16 @@ class PaperStudio:
         ).fetchone()
         return self._attempt_view(row) if row is not None else None
 
+    def latest_answered_attempt(self, paper_id: int) -> dict[str, object] | None:
+        """按作答次数倒序找最近一份**写了东西**的作答，空白卷会被跳过。
+
+        这是“开始作答”的继承来源：空白卷不配当底稿。
+        """
+        for attempt in self.list_attempts(paper_id):
+            if not answers_are_blank(attempt.get("answers")):
+                return attempt
+        return None
+
     def get_attempt(self, attempt_id: int) -> dict[str, object] | None:
         row = self.db.conn.execute(
             "SELECT * FROM studio_attempts WHERE id=?", (int(attempt_id),)
@@ -463,13 +497,50 @@ class PaperStudio:
             view["answers"] = {}
         return view
 
-    def save_answers(self, attempt_id: int, answers: dict[str, str]) -> None:
+    def discard_attempt(self, attempt_id: int) -> bool:
+        """删除一条作答（取消作答时用）。评分记录靠外键 CASCADE 一起走。
+
+        注意 attempt_no 会回到删掉的那个号：新作答取 `MAX(attempt_no)+1`，所以删掉最大号
+        之后下一次复用该号，历史不会跳号。
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.execute("DELETE FROM studio_attempts WHERE id=?", (int(attempt_id),))
+            return cursor.rowcount > 0
+
+    def discard_blank_attempts(self, paper_id: int) -> list[int]:
+        """清掉某张试卷下所有“一字未写”的作答，返回被删掉的 id。
+
+        空白作答既没有信息量，又会让“下一份从哪一份长出来”这件事变得含糊 ——
+        一份空白记录会顶着“最近一次”的位置，把真正的底稿挡住。
+        """
+        doomed = [
+            int(attempt["id"])
+            for attempt in self.list_attempts(paper_id)
+            if answers_are_blank(attempt.get("answers"))
+        ]
+        if not doomed:
+            return []
+        with self.db.transaction() as conn:
+            conn.executemany("DELETE FROM studio_attempts WHERE id=?", [(item,) for item in doomed])
+        return doomed
+
+    def save_answers(self, attempt_id: int, answers: dict[str, str]) -> bool:
+        """保存作答正文，返回是否真的写进去了。
+
+        只允许写**未交卷**的作答：交卷后的记录是评分与报告的底稿，后续编辑一旦写进去，
+        报告就会和已经打出的分数对不上。这里返回 False 而不是抛异常，是因为它被 450ms
+        自动保存定时器调用，不该把界面炸掉。
+        """
+        attempt = self.get_attempt(attempt_id)
+        if attempt is None or str(attempt["status"]) != ATTEMPT_OPEN:
+            return False
         payload = {str(key): str(value) for key, value in answers.items()}
         with self.db.transaction() as conn:
             conn.execute(
                 "UPDATE studio_attempts SET answers_json=? WHERE id=?",
                 (json.dumps(payload, ensure_ascii=False), int(attempt_id)),
             )
+        return True
 
     def submit_attempt(self, attempt_id: int, answers: dict[str, str]) -> dict[str, object]:
         self.save_answers(attempt_id, answers)

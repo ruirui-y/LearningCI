@@ -6,7 +6,7 @@ from pathlib import Path
 
 from learningci.core.paper_studio import (
     ATTEMPT_GRADED, ATTEMPT_OPEN, ATTEMPT_SUBMITTED, PaperStudio, PaperStudioError,
-    format_duration, normalize_grade, normalize_paper,
+    answers_are_blank, format_duration, normalize_grade, normalize_paper,
 )
 from learningci.database import Database
 
@@ -309,6 +309,106 @@ class PaperStudioTests(unittest.TestCase):
         self.assertEqual(before, after)
 
 
+class AttemptInheritanceTests(unittest.TestCase):
+    """「开始作答」继承上一次写过的答案，「重新作答」才是空白。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / "test.db")
+        self.db.initialize()
+        self.studio = PaperStudio(self.db)
+        self.paper = self.studio.import_paper(sample_paper())
+
+    def tearDown(self):
+        self.db.close()
+        self.tmp.cleanup()
+
+    def submit(self, answers: dict) -> dict:
+        attempt = self.studio.start_attempt(self.paper["id"], inherit=False)
+        return self.studio.submit_attempt(attempt["id"], answers)
+
+    def test_inherit_skips_blank_history(self):
+        self.submit({"q1": "有内容的一次"})
+        self.submit({})  # 白卷不该被当成底稿
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(fresh["attempt_no"], 3)
+        self.assertEqual(fresh["answers"]["q1"], "有内容的一次")
+
+    def test_inherit_chains_from_the_latest_answered_attempt(self):
+        self.submit({"q1": "第一次"})
+        self.submit({"q1": "第二次"})
+        third = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(third["attempt_no"], 3)
+        self.assertEqual(third["answers"]["q1"], "第二次")
+
+    def test_first_attempt_has_nothing_to_inherit(self):
+        first = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(first["answers"], {})
+
+    def test_restart_starts_blank(self):
+        self.submit({"q1": "第一次"})
+        blank = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.assertEqual(blank["answers"], {})
+
+    def test_inherit_reuses_open_attempt_instead_of_wiping_it(self):
+        """误点开始作答不能把正在写的内容抹掉。"""
+        attempt = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.studio.save_answers(attempt["id"], {"q1": "正在写"})
+
+        again = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(again["id"], attempt["id"])
+        self.assertEqual(again["answers"]["q1"], "正在写")
+
+    def test_latest_answered_attempt_is_none_when_all_blank(self):
+        self.submit({})
+        self.assertIsNone(self.studio.latest_answered_attempt(self.paper["id"]))
+
+    def test_discard_blank_attempts_removes_only_blank(self):
+        answered = self.submit({"q1": "有内容"})
+        self.submit({})
+        open_blank = self.studio.start_attempt(self.paper["id"], inherit=False)
+
+        removed = self.studio.discard_blank_attempts(self.paper["id"])
+
+        self.assertIn(open_blank["id"], removed)
+        self.assertNotIn(answered["id"], removed)
+        self.assertEqual(
+            [item["id"] for item in self.studio.list_attempts(self.paper["id"])],
+            [answered["id"]],
+        )
+
+    def test_discard_blank_attempts_is_noop_without_blank(self):
+        answered = self.submit({"q1": "有内容"})
+        self.assertEqual(self.studio.discard_blank_attempts(self.paper["id"]), [])
+        self.assertEqual(self.studio.get_attempt(answered["id"])["status"], ATTEMPT_SUBMITTED)
+
+    def test_discard_attempt_removes_its_grade(self):
+        attempt = self.submit({"q1": "a", "q2": "b"})
+        self.studio.import_grade(attempt["id"], {"scores": {"q1": 30, "q2": 20}})
+
+        self.assertTrue(self.studio.discard_attempt(attempt["id"]))
+        self.assertEqual(
+            self.db.conn.execute("SELECT COUNT(*) FROM studio_grades").fetchone()[0], 0
+        )
+
+    def test_discard_attempt_reports_missing_row(self):
+        self.assertFalse(self.studio.discard_attempt(9999))
+
+    def test_save_answers_refuses_submitted_attempt(self):
+        """交卷后的记录是评分与报告的底稿，不能被事后编辑悄悄改写。"""
+        attempt = self.submit({"q1": "交卷时的答案"})
+        self.assertFalse(self.studio.save_answers(attempt["id"], {"q1": "事后改写"}))
+        self.assertEqual(
+            self.studio.get_attempt(attempt["id"])["answers"]["q1"], "交卷时的答案"
+        )
+
+    def test_answers_are_blank_treats_whitespace_as_blank(self):
+        self.assertTrue(answers_are_blank({"q1": "   ", "q2": ""}))
+        self.assertTrue(answers_are_blank({}))
+        self.assertFalse(answers_are_blank({"q1": "x"}))
+        self.assertFalse(answers_are_blank({"q1": " 有内容 "}))
+
+
 class PaperStudioFormatTests(unittest.TestCase):
     def test_format_duration(self):
         self.assertEqual(format_duration(0), "00:00")
@@ -333,6 +433,31 @@ class PaperStudioUiSourceTests(unittest.TestCase):
     def test_answer_key_is_locked_until_submitted(self):
         source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
         self.assertIn("标准答案在交卷后才允许查看", source)
+
+    def test_cancel_attempt_action_is_wired(self):
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("取消作答", source)
+        self.assertIn("self.cancel_btn.clicked.connect(self._cancel_attempt)", source)
+        self.assertIn('addButton("放弃本次作答"', source)
+
+    def test_start_and_restart_use_different_inherit_mode(self):
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("self._start_attempt(inherit=True)", source)
+        self.assertIn("self._start_attempt(inherit=False)", source)
+
+    def test_blank_attempts_are_cleaned_when_paper_selected(self):
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("_discard_blank_attempts", source)
+        self.assertIn("discard_blank_attempts", source)
+
+    def test_submitted_attempt_editors_are_readonly(self):
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("editor.setReadOnly(readonly)", source)
+
+    def test_cancel_submit_reuses_submit_now(self):
+        """取消作答里选交卷不能再问第二遍。"""
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("def _submit_now", source)
 
 
 if __name__ == "__main__":

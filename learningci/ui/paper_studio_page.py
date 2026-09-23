@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
 from learningci.config import STUDIO_EXPORT_DIR, STUDIO_IMPORT_DIR
 from learningci.core.paper_studio import (
     ATTEMPT_GRADED, ATTEMPT_OPEN, ATTEMPT_SUBMITTED, DIMENSION_ZH,
-    PLACEHOLDER_BY_DIMENSION, PaperStudioError, format_duration,
+    PLACEHOLDER_BY_DIMENSION, PaperStudioError, answers_are_blank, format_duration,
 )
 from learningci.ui.dialogs import JsonPasteDialog
 
@@ -99,6 +99,7 @@ class PaperStudioPage(QWidget):
         title.setObjectName("PageTitle")
         sub = QLabel(
             "自己出题、限时闭卷作答、交 AI 评分，然后只看两件事：得了几分，错在哪里。"
+            "「开始作答」会接着上一次写过的答案写，「重新作答」才是空白。"
             "这张试卷完全独立于节点的正式验收。"
         )
         sub.setObjectName("PageSub")
@@ -210,16 +211,26 @@ class PaperStudioPage(QWidget):
         buttons = QHBoxLayout()
         self.start_btn = QPushButton("开始作答")
         self.start_btn.setObjectName("PrimaryButton")
-        self.start_btn.clicked.connect(self._start_attempt)
+        self.start_btn.setToolTip("以上一次写过的答案为基础继续写；没有任何历史时才是空白。")
+        self.start_btn.clicked.connect(lambda: self._start_attempt(inherit=True))
+
         self.submit_btn = QPushButton("交卷")
         self.submit_btn.setObjectName("SuccessButton")
+        self.submit_btn.setToolTip("停止计时并解锁标准答案。")
         self.submit_btn.clicked.connect(self._submit_attempt)
+
+        self.cancel_btn = QPushButton("取消作答")
+        self.cancel_btn.setObjectName("DangerButton")
+        self.cancel_btn.setToolTip("中止这次作答：一个字没写就直接作废；写了东西会先问你要不要交卷。")
+        self.cancel_btn.clicked.connect(self._cancel_attempt)
+
         self.retry_btn = QPushButton("重新作答")
         self.retry_btn.setObjectName("SecondaryButton")
-        self.retry_btn.clicked.connect(self._start_attempt)
-        buttons.addWidget(self.start_btn)
-        buttons.addWidget(self.submit_btn)
-        buttons.addWidget(self.retry_btn)
+        self.retry_btn.setToolTip("从空白开始，不带上一次写过的答案。")
+        self.retry_btn.clicked.connect(lambda: self._start_attempt(inherit=False))
+
+        for button in (self.start_btn, self.submit_btn, self.cancel_btn, self.retry_btn):
+            buttons.addWidget(button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
         return card
@@ -337,7 +348,20 @@ class PaperStudioPage(QWidget):
         if item is None:
             return
         self.paper_id = int(item.data(Qt.ItemDataRole.UserRole))
+        self._discard_blank_attempts()
         self._load_paper()
+
+    def _discard_blank_attempts(self) -> None:
+        """选中试卷时清掉空白作答。
+
+        空白记录本身没有信息量，却会把“最近一次”这个位置占住，让下一次继承
+        找不到真正的底稿。代价是那一次的计时跟着归零 —— 但它本来就没落笔。
+        """
+        if self.paper_id is None:
+            return
+        removed = self.service.studio.discard_blank_attempts(self.paper_id)
+        if removed and self.attempt_id in removed:
+            self.attempt_id = None
 
     def _load_paper(self) -> None:
         if self.paper_id is None:
@@ -369,15 +393,21 @@ class PaperStudioPage(QWidget):
         if open_attempt is not None:
             self.attempt_id = int(open_attempt["id"])
             answers = open_attempt.get("answers", {})
+            readonly = False
         elif latest is not None:
             # 已交卷时默认回看最近一次，方便导入评分与看报告。
+            # 回看态必须只读：那条记录是评分与报告的底稿，再被改写就对不上分。
             self.attempt_id = int(latest["id"])
             answers = latest.get("answers", {})
+            readonly = True
         else:
             self.attempt_id = None
             answers = {}
+            readonly = False
 
-        self._render_questions(questions, answers if isinstance(answers, dict) else {})
+        self._render_questions(
+            questions, answers if isinstance(answers, dict) else {}, readonly=readonly
+        )
         self._render_grade()
         self._sync_buttons()
         self._tick()
@@ -448,7 +478,9 @@ class PaperStudioPage(QWidget):
                 widget.deleteLater()
         self.answer_editors.clear()
 
-    def _render_questions(self, questions: list[dict], answers: dict[str, str]) -> None:
+    def _render_questions(
+        self, questions: list[dict], answers: dict[str, str], *, readonly: bool = False
+    ) -> None:
         self._loading_answers = True
         self._clear_questions()
         for index, question in enumerate(questions, start=1):
@@ -479,11 +511,15 @@ class PaperStudioPage(QWidget):
             editor = QTextEdit()
             editor.setObjectName("AnswerEditor")
             editor.setMinimumHeight(120)
+            editor.setReadOnly(readonly)
             editor.setPlaceholderText(
-                PLACEHOLDER_BY_DIMENSION.get(dimension, "在这里作答。写完再交卷，交卷后计时停止。")
+                "这是已交卷的作答，只能查看；要接着改请点「开始作答」。"
+                if readonly
+                else PLACEHOLDER_BY_DIMENSION.get(dimension, "在这里作答。写完再交卷，交卷后计时停止。")
             )
             editor.setPlainText(str(answers.get(qid, "")))
-            editor.textChanged.connect(self._schedule_autosave)
+            if not readonly:
+                editor.textChanged.connect(self._schedule_autosave)
             layout.addWidget(editor)
 
             self.answer_editors[qid] = editor
@@ -505,16 +541,28 @@ class PaperStudioPage(QWidget):
             return
         self.service.studio.save_answers(self.attempt_id, self._collect_answers())
 
-    def _start_attempt(self) -> None:
+    def _start_attempt(self, inherit: bool = True) -> None:
+        """开始作答（inherit=True 继承历史答案）／重新作答（inherit=False 从空白开始）。"""
         if self.paper_id is None:
             return
         self.autosave_timer.stop()
-        attempt = self.service.studio.start_attempt(self.paper_id)
+        attempt = self.service.studio.start_attempt(self.paper_id, inherit=inherit)
         self.attempt_id = int(attempt["id"])
         self._load_paper()
         self.scroll.verticalScrollBar().setValue(0)
 
+        carried = sum(
+            1 for value in dict(attempt.get("answers", {})).values() if str(value).strip()
+        )
+        if not inherit:
+            self.action_hint.setText("已从空白开始，这次不带上一次写过的答案。")
+        elif carried:
+            self.action_hint.setText(f"已把上一次的 {carried} 题答案带过来了，可以直接在上面改。")
+        else:
+            self.action_hint.setText("这张试卷没有可继承的历史作答，这次从空白开始。")
+
     def _submit_attempt(self) -> None:
+        """「交卷」按钮：先确认再落盘。"""
         if self.attempt_id is None:
             QMessageBox.information(self, "还没有开始作答", "先点「开始作答」，计时才会开始。")
             return
@@ -530,13 +578,18 @@ class PaperStudioPage(QWidget):
         reply = QMessageBox.question(
             self,
             "确认交卷",
-            f"本题共 {total} 题，已作答 {answered} 题。\n交卷后计时停止，标准答案解锁。\n\n确认交卷？",
+            f"本卷共 {total} 题，已作答 {answered} 题。\n交卷后计时停止，标准答案解锁。\n\n确认交卷？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
+        self._submit_now()
 
+    def _submit_now(self) -> None:
+        """真正落盘交卷，不再问第二遍 —— 「取消作答」里选交卷也走这里。"""
+        if self.attempt_id is None:
+            return
         self.autosave_timer.stop()
         submitted = self.service.studio.submit_attempt(self.attempt_id, self._collect_answers())
         self._load_paper()
@@ -545,6 +598,49 @@ class PaperStudioPage(QWidget):
             f"用时 {format_duration(int(submitted['duration_seconds']))}。\n"
             "现在可以「导出给 AI 评分」，或先「查看标准答案」自查。",
         )
+
+    def _cancel_attempt(self) -> None:
+        """取消作答：一字未写就直接作废不交卷；写了东西则问要不要交卷。"""
+        if self.attempt_id is None:
+            QMessageBox.information(self, "没有进行中的作答", "先点「开始作答」。")
+            return
+        attempt = self.service.studio.get_attempt(self.attempt_id)
+        if attempt is None or str(attempt["status"]) != ATTEMPT_OPEN:
+            QMessageBox.information(self, "没有进行中的作答", "这次已经交卷了，不用取消。")
+            return
+
+        self.autosave_timer.stop()
+        if answers_are_blank(self._collect_answers()):
+            self.service.studio.discard_attempt(self.attempt_id)
+            self.attempt_id = None
+            self._load_paper()
+            QMessageBox.information(
+                self, "已取消作答", "这次一个字都没写，已直接作废，没有交卷。"
+            )
+            return
+
+        box = QMessageBox(self)
+        box.setWindowTitle("取消作答")
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText("这次作答已经写了内容。")
+        box.setInformativeText(
+            "交卷：停止计时并解锁标准答案。\n"
+            "放弃本次作答：连同这次写的内容一起删掉，回到上一次记录。"
+        )
+        submit_button = box.addButton("交卷", QMessageBox.ButtonRole.AcceptRole)
+        discard_button = box.addButton("放弃本次作答", QMessageBox.ButtonRole.DestructiveRole)
+        keep_button = box.addButton("继续作答", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(keep_button)
+        box.exec()
+
+        clicked = box.clickedButton()
+        if clicked is submit_button:
+            self._submit_now()
+        elif clicked is discard_button:
+            self.service.studio.discard_attempt(self.attempt_id)
+            self.attempt_id = None
+            self._load_paper()
+            QMessageBox.information(self, "已放弃本次作答", "这次作答已删除，回到上一次记录。")
 
     def _tick(self) -> None:
         if self.attempt_id is None:
@@ -593,6 +689,7 @@ class PaperStudioPage(QWidget):
         self.delete_btn.setEnabled(has_paper)
         self.start_btn.setEnabled(has_paper and not is_open)
         self.submit_btn.setEnabled(is_open)
+        self.cancel_btn.setEnabled(is_open)
         self.retry_btn.setEnabled(has_paper and is_submitted)
         self.export_review_btn.setEnabled(is_submitted)
         self.import_grade_btn.setEnabled(is_submitted)
@@ -602,16 +699,18 @@ class PaperStudioPage(QWidget):
 
         if is_open:
             self.status_label.setText("状态：作答中。回答会自动保存到本地，交卷时停止计时。")
-            self.action_hint.setText("交卷后才能导出评分请求、导入评分和查看标准答案。")
+            self.action_hint.setText(
+                "交卷后才能导出评分请求、导入评分和查看标准答案；想退出这次作答点「取消作答」。"
+            )
         elif graded:
             self.status_label.setText("状态：已交卷并已评分。可以导出精简报告，或重新作答一次对比。")
-            self.action_hint.setText("导入的评分会覆盖同一次作答的上一份评分。")
+            self.action_hint.setText("「开始作答」会带上这次的答案继续写，「重新作答」才是从空白开始。")
         elif is_submitted:
             self.status_label.setText("状态：已交卷，等待评分。导出评分请求交给 AI，再把返回的 JSON 粘回来。")
-            self.action_hint.setText("评分 JSON 里的 issues 就是“我错在哪里”，可以直接导出成精简报告。")
+            self.action_hint.setText("「开始作答」会带上这次的答案继续写，「重新作答」才是从空白开始。")
         elif has_paper:
             self.status_label.setText("状态：未开始。点「开始作答」启动计时。")
-            self.action_hint.setText("开始作答后计时立即启动，中途可以随时关闭窗口，下次继续。")
+            self.action_hint.setText("「开始作答」会带上上一次写过的答案；没有任何历史时才从空白开始。")
         else:
             self.status_label.setText("")
             self.action_hint.setText("")
