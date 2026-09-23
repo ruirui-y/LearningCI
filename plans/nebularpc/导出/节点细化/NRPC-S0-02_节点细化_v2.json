@@ -1,0 +1,500 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S0-02",
+  "node_title": "game_rpc_project 历史能力审计",
+  "source_plan_version": "0.3-learningci-full",
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true
+  },
+  "task_groups": [
+    {
+      "id": "rpc_entry",
+      "title": "1. RPC客户端入口与协议编码审计",
+      "items": [
+        {
+          "id": "NRPC-S0-02-01",
+          "title": "定位MyChannel调用入口",
+          "detail": "找到真实CallMethod入口与调用关系",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-02",
+          "title": "审计Protobuf Stub到CallMethod链路",
+          "detail": "确认客户端进入RPC框架的真实路径",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-03",
+          "title": "审计RpcHeader字段来源",
+          "detail": "确认method、request id、长度等字段实际来源",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-04",
+          "title": "还原请求序列化布局",
+          "detail": "记录Header与Payload实际拼接顺序",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-05",
+          "title": "审计服务端Header解析链",
+          "detail": "确认请求解码入口与失败路径",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pending_call",
+      "title": "2. RequestId、PendingCall与promise/future审计",
+      "items": [
+        {
+          "id": "NRPC-S0-02-06",
+          "title": "定位RequestId生成规则",
+          "detail": "确认seq_id/request_id生命周期",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-07",
+          "title": "追踪RequestId请求响应往返",
+          "detail": "确认响应如何关联原请求",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-08",
+          "title": "定位PendingCall容器",
+          "detail": "确认pending map结构和所有权",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-09",
+          "title": "审计promise创建与future获取",
+          "detail": "确认等待对象创建顺序",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-10",
+          "title": "审计PendingCall完成路径",
+          "detail": "确认Response如何触发promise完成",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-11",
+          "title": "检查timeout后的PendingCall行为",
+          "detail": "确认超时与迟到响应边界",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "receiver",
+      "title": "3. ReceiverThread与同步等待模型审计",
+      "items": [
+        {
+          "id": "NRPC-S0-02-12",
+          "title": "定位ReceiverThread启动入口",
+          "detail": "确认接收线程职责",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-13",
+          "title": "审计Response接收流程",
+          "detail": "确认recv/MSG_WAITALL与解析链",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-14",
+          "title": "追踪Response到PendingCall匹配",
+          "detail": "确认接收线程如何完成future",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-15",
+          "title": "审计future.wait_for等待边界",
+          "detail": "确认业务线程阻塞位置",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-16",
+          "title": "绘制旧RPC线程时序图",
+          "detail": "形成业务线程、发送、ReceiverThread三方关系",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "server_lifecycle",
+      "title": "4. RPCServer、Protobuf分发与生命周期审计",
+      "items": [
+        {
+          "id": "NRPC-S0-02-17",
+          "title": "审计RPCServer Service注册",
+          "detail": "确认服务映射结构",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-18",
+          "title": "追踪服务端Method分发",
+          "detail": "确认Service/Method调用链",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-19",
+          "title": "审计Response与Closure生命周期",
+          "detail": "确认服务端对象释放边界",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-20",
+          "title": "审计ConnectionPool能力",
+          "detail": "确认连接复用和并发保护",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "boundary",
+      "title": "5. 同步模型边界与历史技术债总结",
+      "items": [
+        {
+          "id": "NRPC-S0-02-21",
+          "title": "记录旧RPC已证明能力",
+          "detail": "形成能力矩阵",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-22",
+          "title": "记录旧RPC同步模型限制",
+          "detail": "明确ReceiverThread/future边界",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-23",
+          "title": "记录至少三个历史技术债",
+          "detail": "每项绑定源码证据",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-24",
+          "title": "完成GAME_RPC_AUDIT.md审计产物",
+          "detail": "形成最终历史基线文档",
+          "purpose": "基于真实源码确认旧RPC已经完成的能力与同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "绑定真实源码证据",
+            "形成可复核结论"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 24
+}

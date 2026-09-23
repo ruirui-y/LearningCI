@@ -1,0 +1,562 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S0-02",
+  "node_title": "game_rpc_project 历史能力审计",
+  "source_plan_version": "0.3-learningci-full",
+  "source_section": "§4.2 / §4.4 / §7 / §30",
+  "compiler": {
+    "type": "ChatGPT 手工导出导入细化",
+    "status": "REVIEWED",
+    "note": "由 LearningCI 导出细化包，经聊天式 AI 生成后人工导回；未使用任何模型 API。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "g1",
+      "title": "1. 阅读旧 RPC 的 MyChannel、RPCServer、ConnectionPool、RpcHeader 等真实实现",
+      "description": "先建立旧 RPC 的真实源码地图，再分别确认客户端入口、协议编码、服务端分发和连接复用；不进入新协议或 Async RPC 设计。",
+      "items": [
+        {
+          "id": "NRPC-S0-02-G1-01",
+          "title": "建立旧 RPC 源码地图",
+          "detail": "定位 MyChannel、RPCServer、ConnectionPool、RpcHeader/proto 的真实文件、类与关键函数，记录审计使用的仓库版本与 HEAD。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录仓库分支/HEAD",
+            "四类核心对象均绑定真实源码路径与函数/消息定义",
+            "不凭计划文档猜测源码位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G1-02",
+          "title": "追踪 Protobuf Stub → RpcChannel::CallMethod",
+          "detail": "从一个真实客户端 Stub 调用点开始，追踪 generated Stub 如何进入自定义 RpcChannel::CallMethod，并记录 Service/Method 元数据的实际来源。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到真实 Stub 调用点",
+            "追踪到自定义 CallMethod",
+            "说明 MethodDescriptor 或等价元数据的使用位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G1-03",
+          "title": "审计 Request 序列化与 RpcHeader 构造",
+          "detail": "确认 request 如何序列化，RpcHeader 中服务名、方法名、RequestId/seq_id、长度等字段如何赋值；不存在的字段必须如实记录。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到 request 序列化调用",
+            "列出真实 Header 关键字段",
+            "每个关键字段绑定赋值位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G1-04",
+          "title": "还原客户端发送前字节布局",
+          "detail": "仅根据旧代码还原一次 RPC 请求在 send 前的真实字节拼接顺序，包括长度、Header、Payload 等现有部分，并记录实际 send 调用。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "给出真实旧协议字节布局",
+            "每段数据绑定构造代码",
+            "找到 send 调用及返回值处理"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G1-05",
+          "title": "追踪 RPCServer Header/Request 解码与 Method 分发",
+          "detail": "从服务端收包入口追踪 Header 解析、Request Parse、Service/Method 查找以及 google::protobuf::Service::CallMethod 或等价分发。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 22,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到服务端收包入口",
+            "找到 Header/Request 解析位置",
+            "找到 Service/Method 查找与业务方法调用位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G1-06",
+          "title": "审计 ConnectionPool 的复用与并发边界",
+          "detail": "定位 ConnectionPool 的创建、获取/复用、共享状态和同步原语，确认调用方实际复用的是 socket、Channel 还是其他对象。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录 pool 核心容器",
+            "追踪一次 acquire/get 路径",
+            "说明并发保护和复用对象的真实类型"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g2",
+      "title": "2. 在 NebulaRPC/docs/history/GAME_RPC_AUDIT.md 中画出 CallMethod→PendingCall→ReceiverThread→promise/future 完成链",
+      "description": "把 RequestId、PendingCall、promise/future、发送、ReceiverThread 和 Response 匹配串成一条可复核的真实链路。",
+      "items": [
+        {
+          "id": "NRPC-S0-02-G2-01",
+          "title": "审计 RequestId / seq_id 的生成与往返",
+          "detail": "找到 RequestId/seq_id 的成员、类型、初始值和生成位置，并追踪它如何进入请求、在服务端读取并随 Response 返回。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录 ID 声明与生成规则",
+            "找到写入请求的位置",
+            "找到 Response 回填/返回位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G2-02",
+          "title": "审计 PendingCall 容器与 promise/future 创建顺序",
+          "detail": "定位 pending_calls_ 或等价容器，记录 key/value、所属对象、同步原语，以及 promise 创建、get_future、pending 注册的真实先后顺序。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "记录 PendingCall 容器真实类型和所有权",
+            "找到 promise/get_future",
+            "写出 pending 注册与三者的真实先后顺序"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G2-03",
+          "title": "确认 PendingCall 注册与 send 的先后关系",
+          "detail": "根据源码确认 pending 注册发生在 socket send 之前还是之后，并说明该顺序在旧同步模型中承担的作用；同时记录发送侧互斥/共享连接行为。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到 pending 插入位置",
+            "找到 send 位置",
+            "明确执行顺序和发送侧同步边界"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G2-04",
+          "title": "追踪 ReceiverThread → ResponseId → PendingCall → set_value",
+          "detail": "从 ReceiverThread 得到完整 Response 开始，追踪反序列化、Response RequestId、PendingCall 查找、promise.set_value/set_exception 与 erase/清理顺序。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 22,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到 ResponseId 解析位置",
+            "找到 PendingCall 查找",
+            "找到 promise 完成与清理位置",
+            "写出完整完成顺序"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G2-05",
+          "title": "绘制旧 RPC 完整线程时序图",
+          "detail": "在 GAME_RPC_AUDIT.md 中用至少三条泳道表示业务调用线程、发送/socket 路径、ReceiverThread，标出 RequestId、pending 注册、send、wait_for、recv、set_value 和返回。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "至少三条执行路径",
+            "标出 RequestId/PendingCall",
+            "标出业务线程阻塞点与 ReceiverThread 完成点",
+            "关键节点均可回到源码"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g3",
+      "title": "3. 记录至少三个旧模型仍未解决的问题",
+      "description": "只诊断真实旧代码边界；每个问题都必须有源码证据，不把未来方案写成本节点成果。",
+      "items": [
+        {
+          "id": "NRPC-S0-02-G3-01",
+          "title": "审计 ReceiverThread + MSG_WAITALL 的阻塞边界",
+          "detail": "分别检查长度头和 Body 的 recv 调用、MSG_WAITALL 使用、返回 0/<0/短读处理，以及线程可能阻塞的具体系统调用。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到 recv/MSG_WAITALL 真实调用",
+            "记录 0/<0/短读分支",
+            "说明 ReceiverThread 的具体阻塞点"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G3-02",
+          "title": "审计 future.wait_for 与 timeout / late response",
+          "detail": "找到业务线程 wait_for、timeout 来源和 timeout 分支，检查超时后 PendingCall 是否清理，以及迟到 Response 到达时的真实处理。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 22,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到 wait_for 与 timeout 来源",
+            "确认 timeout 后 pending 状态",
+            "基于源码说明 late response 行为"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G3-03",
+          "title": "审计 Connection Close 对未完成 PendingCall 的影响",
+          "detail": "沿 recv 失败/socket 关闭路径检查 ReceiverThread 如何退出、是否遍历完成 pending，以及尚在 wait_for 的业务线程最终如何返回。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到断连/recv failure 分支",
+            "检查是否统一收束 pending",
+            "说明等待调用的真实退出方式"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G3-04",
+          "title": "审计 RPCServer request/response/Closure 生命周期",
+          "detail": "找到服务端 request、response、Closure 的创建和释放位置，并判断业务 Handler 若在 CallMethod 返回后才调用 done 时，旧生命周期是否仍成立。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 22,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "找到三类对象创建/释放位置",
+            "形成生命周期时间线",
+            "异步 Handler 边界结论必须由源码支撑"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-G3-05",
+          "title": "形成旧 RPC 技术债诊断清单",
+          "detail": "从前四项和真实源码中选至少三个问题，按“观察→源码证据→影响→旧代码结论”写入 GAME_RPC_AUDIT.md；禁止直接给未来 Async RPC/协程方案。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "至少三个技术债",
+            "至少一个来自异常/失败路径",
+            "每项包含真实文件/函数证据",
+            "不进入新 Async RPC、协议重设计或协程"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "must",
+      "title": "能力核对",
+      "description": "把“看过源码”压缩成能够脱离材料解释的当前节点能力。",
+      "items": [
+        {
+          "id": "NRPC-S0-02-M-01",
+          "title": "闭卷复述 RequestId → PendingCall",
+          "detail": "不看源码，用自己的话说明 RequestId 为什么存在、何时生成、如何进入 PendingCall、Response 如何命中并完成。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "连续说明完整因果链",
+            "指出至少一个真实源码落点",
+            "说明一个 unknown/late response 边界"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-M-02",
+          "title": "闭卷复述 promise/future 的线程关系",
+          "detail": "不看源码说明谁创建 promise/future、谁 wait_for、谁 set_value，以及这些动作分别在哪条执行路径。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "明确 promise/future 创建方",
+            "明确业务线程阻塞点",
+            "明确 ReceiverThread 完成职责"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-M-03",
+          "title": "闭卷复述 Protobuf 分发链",
+          "detail": "不看源码，从客户端 Stub/RpcChannel 开始复述 Header/Request 到服务端 Service/Method，再到 Response 返回的关键节点。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "覆盖 Stub/RpcChannel",
+            "覆盖 Header/Request",
+            "覆盖 Service/Method",
+            "覆盖 Response"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-M-04",
+          "title": "闭卷复述 ReceiverThread + MSG_WAITALL 边界",
+          "detail": "不看源码说明该模型为什么能工作、业务线程为什么仍阻塞，以及断连、超时和迟到响应等边界。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "说明 ReceiverThread 作用",
+            "说明 MSG_WAITALL/recv 阻塞位置",
+            "说明至少两个异常边界"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-M-05",
+          "title": "闭卷区分已解决能力与现代 Async RPC",
+          "detail": "不看源码列出旧项目真正已经证明的能力和仍未证明的能力，不能因为存在 RequestId/PendingCall 就把它描述成现代异步 RPC。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "至少列出四条已证明能力",
+            "至少列出三条未证明/过渡能力",
+            "理由能回到同步模型边界"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "title": "验收准备",
+      "description": "只核对当前节点证据是否足够进入固定 Verification，不增加新的学习内容。",
+      "items": [
+        {
+          "id": "NRPC-S0-02-GATE-01",
+          "title": "核对 GAME_RPC_AUDIT.md 可复核性",
+          "detail": "确认 NebulaRPC/docs/history/GAME_RPC_AUDIT.md 已覆盖客户端完成链、服务端 Protobuf 分发、timeout/ConnectionPool 和至少三个技术债，关键结论均有源码证据。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "call_chain",
+            "evidence_note"
+          ],
+          "done_when": [
+            "目标文件存在",
+            "Must Learn 全部有对应证据",
+            "至少三个技术债可复核",
+            "关键结论无无证据断言"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-GATE-02",
+          "title": "核对 Out of Scope",
+          "detail": "确认当前节点没有开始重新设计 RPC 协议、实现新 Async RPC 或协程；未来方案最多记录为后续节点事项。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 6,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "没有提交 Out of Scope 实现",
+            "审计结论与未来设计明确分开"
+          ]
+        },
+        {
+          "id": "NRPC-S0-02-GATE-03",
+          "title": "对照固定试卷准备证据",
+          "detail": "只查看固定 Verification 的五个维度，检查已有叶子证据是否足够；不向 AI 索取答案，也不为考试重复抄源码。",
+          "purpose": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+          "estimated_minutes": 8,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "explanation/prediction 有当前机制依据",
+            "implementation 使用已保存工程证据",
+            "diagnosis/transfer 有当前节点边界依据"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 24,
+  "verification_paper": {
+    "paper_id": "NRPC-S0-02-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "不查看总计划，用自己的话解释“game_rpc_project 历史能力审计”的核心机制、它解决的问题以及边界。必须覆盖本节点 Must Learn：RequestId/seq_id；PendingCall map；promise/future；ReceiverThread + MSG_WAITALL；基础 timeout / ConnectionPool。不能只背定义；需要结合 NebulaRPC 当前实现或设计说明因果关系。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "围绕“game_rpc_project 历史能力审计”构造一个当前节点范围内的陌生变化场景：改变一个关键输入、时序、并发条件或故障条件。在实际运行前，先预测系统行为、关键状态变化和最可能失败的位置，并写出预测依据。不得进入本节点明确不考的范围：重新设计 RPC 协议；实现新 Async RPC；协程。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交本节点规定的真实工程产物并证明它达到冻结计划的最低验收标准。项目锚点：docs/history/GAME_RPC_AUDIT.md。必须附可验证证据（至少一种：源码路径与函数名、真实调用链证据），同时给出复现命令/步骤和实际结果；只描述“已经完成”不得分。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实实现、测试或实验中选择一个失败/异常/边界问题进行诊断。必须按“观察 → 假设 → 证据采集 → 根因 → 修复或结论 → 再验证”完成，并附真实可验证证据（源码路径与函数名、真实调用链证据）。问题必须严格属于“game_rpc_project 历史能力审计”范围。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "给出一个没有在训练任务中原样出现、但仍属于当前能力边界的新场景，说明如何把“能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。”迁移过去。必须说明哪些原则保持不变、哪些参数或实现需要调整、有什么取舍；禁止借此提前进入：重新设计 RPC 协议；实现新 Async RPC；协程。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

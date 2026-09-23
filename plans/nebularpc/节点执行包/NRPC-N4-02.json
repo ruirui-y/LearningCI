@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-N4-02",
+  "node_title": "Observability / Fault / Graceful Shutdown",
+  "source_plan_version": "0.4-simple-mainline",
+  "source_section": "§7.2",
+  "compiler": {
+    "type": "LearningCI 简化执行包生成器",
+    "status": "REVIEWED",
+    "note": "v0.4 默认执行包已可直接开始；只有节点确实过大或边界不清时才使用节点准备重新细化。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "main",
+      "title": "Observability / Fault / Graceful Shutdown · 主任务",
+      "description": "保持节点完整，不再人为拆成二三十个碎片任务。",
+      "items": [
+        {
+          "id": "NRPC-N4-02-T01",
+          "title": "实现 Counter/Gauge/Histogram 与 EventLoop lag 等核心指标",
+          "detail": "实现 Counter/Gauge/Histogram 与 EventLoop lag 等核心指标",
+          "purpose": "让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N4-02-T02",
+          "title": "实现 RequestId debug trace 或等价低成本追踪",
+          "detail": "实现 RequestId debug trace 或等价低成本追踪",
+          "purpose": "让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N4-02-T03",
+          "title": "建立连接/协议/慢消费者/超时等 fault matrix",
+          "detail": "建立连接/协议/慢消费者/超时等 fault matrix",
+          "purpose": "让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N4-02-T04",
+          "title": "实现 graceful shutdown 状态机并验证 pending/coroutine/connection 清理",
+          "detail": "实现 graceful shutdown 状态机并验证 pending/coroutine/connection 清理",
+          "purpose": "让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N4-02-V01",
+          "title": "运行针对性测试并保留失败/修复证据",
+          "detail": "运行针对性测试并保留失败/修复证据",
+          "purpose": "让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 5,
+  "verification_paper": {
+    "paper_id": "NRPC-N4-02-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "解释 Observability / Fault / Graceful Shutdown 的核心机制和边界，覆盖：metrics；tail latency observability；fault injection；graceful shutdown。重点说明因果关系，不背术语。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "给当前能力制造一个新的时序、并发或故障变化，在运行前预测关键状态和失败点。不得进入：完整 Prometheus 平台；分布式 tracing 系统。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交真实工程结果。锚点：nebula/observability/、tests/fault/、tests/shutdown/。必须附复现步骤和至少一种证据：指标输出、故障测试、shutdown 测试、资源清理证据。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实运行中选择一个故障/边界，按观察→假设→证据→根因→修复→再验证完成诊断。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "把“让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。”迁移到一个训练任务未原样出现的新场景，说明不变原则、需要调整的实现与取舍。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

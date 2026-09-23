@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-B0-01",
+  "node_title": "建立 NebulaRPC 可工作的 Baseline",
+  "source_plan_version": "0.4-simple-mainline",
+  "source_section": "§3",
+  "compiler": {
+    "type": "LearningCI 简化执行包生成器",
+    "status": "REVIEWED",
+    "note": "v0.4 默认执行包已可直接开始；只有节点确实过大或边界不清时才使用节点准备重新细化。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "main",
+      "title": "建立 NebulaRPC 可工作的 Baseline · 主任务",
+      "description": "保持节点完整，不再人为拆成二三十个碎片任务。",
+      "items": [
+        {
+          "id": "NRPC-B0-01-T01",
+          "title": "让 AI 对照 MyMuduo 与 game_rpc_project 选择真正可复用代码，禁止整仓复制",
+          "detail": "让 AI 对照 MyMuduo 与 game_rpc_project 选择真正可复用代码，禁止整仓复制",
+          "purpose": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+          "estimated_minutes": 35,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-B0-01-T02",
+          "title": "迁移并整理 net 基础：EventLoop/Poller/Channel/Buffer/TcpConnection/TcpServer/TcpClient",
+          "detail": "迁移并整理 net 基础：EventLoop/Poller/Channel/Buffer/TcpConnection/TcpServer/TcpClient",
+          "purpose": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+          "estimated_minutes": 35,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-B0-01-T03",
+          "title": "迁移并整理 RPC 基础：Frame/Parser、Protobuf Adapter、RequestId/PendingCall、Provider/Channel 必要部分",
+          "detail": "迁移并整理 RPC 基础：Frame/Parser、Protobuf Adapter、RequestId/PendingCall、Provider/Channel 必要部分",
+          "purpose": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+          "estimated_minutes": 35,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-B0-01-T04",
+          "title": "统一 namespace、CMake、目录、错误处理和测试入口，删除旧项目业务与重复封装",
+          "detail": "统一 namespace、CMake、目录、错误处理和测试入口，删除旧项目业务与重复封装",
+          "purpose": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+          "estimated_minutes": 35,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-B0-01-T05",
+          "title": "跑通 localhost echo 与一次最小 protobuf RPC，并用 ASan/UBSan 至少验证一次",
+          "detail": "跑通 localhost echo 与一次最小 protobuf RPC，并用 ASan/UBSan 至少验证一次",
+          "purpose": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+          "estimated_minutes": 35,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-B0-01-V01",
+          "title": "编译运行并形成 baseline commit",
+          "detail": "编译运行并形成 baseline commit",
+          "purpose": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 6,
+  "verification_paper": {
+    "paper_id": "NRPC-B0-01-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "解释 建立 NebulaRPC 可工作的 Baseline 的核心机制和边界，覆盖：AI 辅助迁移而非从零重写；模块边界与依赖裁剪；可重复 build/test；最小 end-to-end RPC。重点说明因果关系，不背术语。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "给当前能力制造一个新的时序、并发或故障变化，在运行前预测关键状态和失败点。不得进入：重新学习 epoll API；迁移旧业务代码；为了架构好看提前引入协程/Multi-Reactor。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交真实工程结果。锚点：nebula/net/、nebula/rpc/、tests/、CMakeLists.txt。必须附复现步骤和至少一种证据：可编译源码、echo test、最小 RPC 测试、Sanitizer 结果、Git commit。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实运行中选择一个故障/边界，按观察→假设→证据→根因→修复→再验证完成诊断。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "把“能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。”迁移到一个训练任务未原样出现的新场景，说明不变原则、需要调整的实现与取舍。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

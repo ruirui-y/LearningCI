@@ -2,3104 +2,749 @@
   "plan": {
     "id": "nebularpc-learningci-v0.2",
     "name": "NebulaRPC",
-    "version": "0.3-learningci-full",
-    "description": "严格根据 NebulaRPC Master Plan v0.2 编译出的冻结执行路线。Stage 0~2 为 Recovery Zone，Stage 3 起进入新知识主线。",
+    "version": "0.4-simple-mainline",
+    "description": "简化主线：先快速回顾 MyMuduo/game_rpc_project，再由 AI 辅助迁移形成 NebulaRPC baseline；之后只围绕新能力逐项开发，最终与 bRPC/gRPC 公平验证并形成求职证据。",
     "source_document": "MASTER_PLAN.md",
-    "path_semantics": "project_anchor.paths 全部相对于目标项目 NebulaRPC 根目录，不是 LearningCI/docs。",
+    "path_semantics": "project_anchor.paths 相对于目标项目 NebulaRPC 根目录；旧项目路径仅用于 REVIEW。",
     "route_rules": {
       "single_active_node": true,
       "pass_score": 80,
       "optional_nodes_block_mainline": false,
       "failed_node_must_retry": true,
-      "retests_do_not_rewind_mainline": true
+      "retests_do_not_rewind_mainline": true,
+      "recovery_is_review_not_rewrite": true,
+      "ai_assisted_baseline_migration": true,
+      "new_features_require_real_code_and_evidence": true
     }
   },
   "nodes": [
     {
-      "id": "NRPC-S0-01",
+      "id": "NRPC-R0-01",
       "stage": "0",
       "order": 1,
-      "title": "MyMuduo 历史能力审计",
-      "capability": "能够基于真实源码说明 MyMuduo 已经解决的 Reactor/TcpClient/Buffer/生命周期问题，并明确哪些能力无需在 NebulaRPC 中从零重做。",
+      "title": "快速回顾 MyMuduo 网络运行时",
+      "capability": "能够重新说清 MyMuduo 中 Reactor、连接生命周期、Buffer、TcpClient 与线程归属，并知道哪些实现可以直接作为 NebulaRPC 的历史基础。",
+      "execution_mode": "REVIEW",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§4.1 / §7 / §30",
+      "source_section": "§2.1",
       "tasks": [
-        "阅读 MyMuduo 的 EventLoop、TcpConnection、Connector、TcpClient、Buffer 真实实现",
-        "在 NebulaRPC/docs/history/MYMUDUO_AUDIT.md 中记录已解决能力、历史技术债和可复用边界",
-        "每条关键结论至少绑定一个源码文件/函数位置"
+        "回看 EventLoop/Poller/Channel 的可读可写事件链",
+        "回看 TcpConnection 的 partial write、EPOLLOUT 与关闭生命周期",
+        "回看 Buffer、Connector/TcpClient 与 One Loop Per Thread",
+        "运行或定位一个已有 echo/网络测试，确认旧工程仍能作为参考"
       ],
       "must_learn": [
-        "Reactor / One Loop Per Thread 已有能力边界",
-        "TcpClient/Connector 事件驱动收发",
-        "partial write / output buffer / EPOLLOUT 历史实现",
-        "TcpConnection 生命周期与所有权"
+        "Reactor/epoll readiness",
+        "partial write/output buffer/EPOLLOUT",
+        "TcpConnection 生命周期",
+        "TcpClient/Connector",
+        "One Loop Per Thread"
       ],
       "out_of_scope": [
-        "重新实现 Reactor",
-        "重新优化 MyMuduo",
-        "协程"
+        "重新手写一遍 MyMuduo",
+        "整理大篇审计文档",
+        "RPC/协程"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "docs/history/MYMUDUO_AUDIT.md"
+          "../MyMuduo/"
         ],
         "evidence": [
-          "源码路径与函数名",
-          "git grep/IDE 调用链记录"
+          "真实源码位置",
+          "已有测试/运行结果",
+          "口头解释"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S0-02",
+      "id": "NRPC-R0-02",
       "stage": "0",
       "order": 2,
-      "title": "game_rpc_project 历史能力审计",
-      "capability": "能够基于真实源码说明旧 RPC 已经完成的 RequestId、PendingCall、Protobuf、ReceiverThread、future.wait_for 链路，并指出其同步模型边界。",
+      "title": "快速回顾 game_rpc_project RPC 链路",
+      "capability": "能够重新说清旧 RPC 的协议、Protobuf Service 分发、RequestId/PendingCall、promise/future 与收包线程模型，并明确它与真正异步 RPC 的差距。",
+      "execution_mode": "REVIEW",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§4.2 / §4.4 / §7 / §30",
+      "source_section": "§2.2",
       "tasks": [
-        "阅读旧 RPC 的 MyChannel、RPCServer、ConnectionPool、RpcHeader 等真实实现",
-        "在 NebulaRPC/docs/history/GAME_RPC_AUDIT.md 中画出 CallMethod→PendingCall→ReceiverThread→promise/future 完成链",
-        "记录至少三个旧模型仍未解决的问题"
+        "回看请求编码、消息边界与增量解析",
+        "回看 RpcProvider/Service 分发与响应编码",
+        "回看 RequestId、PendingCall、promise/future 的请求响应匹配",
+        "回看 ReceiverThread/wait_for 模型并指出后续必须替换的同步阻塞点"
       ],
       "must_learn": [
-        "RequestId/seq_id",
-        "PendingCall map",
+        "TCP 消息边界",
+        "Protobuf Service dispatch",
+        "RequestId/PendingCall",
         "promise/future",
-        "ReceiverThread + MSG_WAITALL",
-        "基础 timeout / ConnectionPool"
+        "ReceiverThread/wait_for 局限"
       ],
       "out_of_scope": [
-        "重新设计 RPC 协议",
-        "实现新 Async RPC",
-        "协程"
+        "重写旧 RPC",
+        "提前实现协程",
+        "写历史总结报告"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "docs/history/GAME_RPC_AUDIT.md"
+          "../game_rpc_project/"
         ],
         "evidence": [
-          "源码路径与函数名",
-          "真实调用链证据"
+          "真实源码位置",
+          "已有测试/运行结果",
+          "调用链解释"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S0-03",
-      "stage": "0",
+      "id": "NRPC-B0-01",
+      "stage": "1",
       "order": 3,
-      "title": "历史断点与新起跑线确认",
-      "capability": "能够把旧网络库和旧 RPC 的能力拼成一张边界图，并准确指出 NebulaRPC 的真实新断点是 Event-Driven TcpClient + PendingCall 的 Async RPC。",
+      "title": "建立 NebulaRPC 可工作的 Baseline",
+      "capability": "能够在 AI 辅助下从两个旧项目抽取可复用网络层与 RPC 基础，整理成干净的 NebulaRPC baseline，并用 echo 与最小 RPC 证明迁移结果可工作。",
+      "execution_mode": "MIGRATE",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§4.3 / §5.2 / §5.3 / §6",
+      "source_section": "§3",
       "tasks": [
-        "对照两个历史审计文档，写 NebulaRPC/docs/history/BREAKPOINT.md",
-        "明确保留、废弃、下一步连接三类结论",
-        "写出 Stage 0~2 Recovery Zone 与 Stage 3 New Knowledge Zone 的边界"
+        "让 AI 对照 MyMuduo 与 game_rpc_project 选择真正可复用代码，禁止整仓复制",
+        "迁移并整理 net 基础：EventLoop/Poller/Channel/Buffer/TcpConnection/TcpServer/TcpClient",
+        "迁移并整理 RPC 基础：Frame/Parser、Protobuf Adapter、RequestId/PendingCall、Provider/Channel 必要部分",
+        "统一 namespace、CMake、目录、错误处理和测试入口，删除旧项目业务与重复封装",
+        "跑通 localhost echo 与一次最小 protobuf RPC，并用 ASan/UBSan 至少验证一次"
       ],
       "must_learn": [
-        "旧网络模型与旧 RPC 模型之间的断点",
-        "ReceiverThread/wait_for 为什么是过渡模型",
-        "Stage 3 为什么是真正的新起点"
+        "AI 辅助迁移而非从零重写",
+        "模块边界与依赖裁剪",
+        "可重复 build/test",
+        "最小 end-to-end RPC"
       ],
       "out_of_scope": [
-        "实现 CallAsync",
-        "实现协程",
-        "性能优化"
+        "重新学习 epoll API",
+        "迁移旧业务代码",
+        "为了架构好看提前引入协程/Multi-Reactor"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "docs/history/BREAKPOINT.md"
+          "nebula/net/",
+          "nebula/rpc/",
+          "tests/",
+          "CMakeLists.txt"
         ],
         "evidence": [
-          "两份 audit 的交叉引用",
-          "明确的历史演进图"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S0-04",
-      "stage": "0",
-      "order": 4,
-      "title": "可重复 Build / Test 基线",
-      "capability": "能够在固定环境下一键配置、构建、运行单元测试，并在 Debug/Release/ASan/UBSan 之间明确切换。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§7.3 / §7.4",
-      "tasks": [
-        "建立 C++20 + CMake + Ninja 构建基线",
-        "建立 Debug/Release 与 ASan/UBSan 配置",
-        "让 configure/build/test 命令可重复执行并写入仓库文档"
-      ],
-      "must_learn": [
-        "C++20 构建基线",
-        "CTest/测试命令",
-        "ASan/UBSan 用途",
-        "Release 与 Debug 区别"
-      ],
-      "out_of_scope": [
-        "性能优化",
-        "TSan 并发问题深挖",
-        "brpc/gRPC 对比"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "CMakeLists.txt",
-          "scripts/",
-          "docs/benchmark/environment.md"
-        ],
-        "evidence": [
-          "构建命令输出",
-          "测试结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S0-05",
-      "stage": "0",
-      "order": 5,
-      "title": "Benchmark 环境记录基线",
-      "capability": "能够记录 CPU/RAM/Kernel/Compiler/Build/CPU governor 等实验条件，使后续性能数据具备可重复性。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§3 / §18 / §25",
-      "tasks": [
-        "记录主开发/正式 benchmark 环境",
-        "建立 benchmark 输出字段模板",
-        "同一参数重复运行并确认波动处于可解释范围"
-      ],
-      "must_learn": [
-        "环境变量对 benchmark 的影响",
-        "QPS/P50/P99/P999/CPU/RSS 基本指标",
-        "Git commit 与实验结果绑定"
-      ],
-      "out_of_scope": [
-        "优化代码",
-        "框架对比结论"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/environment.md",
-          "benchmark/README.md"
-        ],
-        "evidence": [
-          "环境报告",
-          "重复运行原始结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S1-01",
-      "stage": "1",
-      "order": 6,
-      "title": "EventLoop 可读事件完整路径",
-      "capability": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§8.1~§8.6",
-      "tasks": [
-        "恢复最小 EventLoop/Channel/TcpConnection read path",
-        "完成 localhost echo 可读路径",
-        "用日志或 strace 验证一次事件完整调用链"
-      ],
-      "must_learn": [
-        "nonblocking socket",
-        "epoll readiness",
-        "Channel callback",
-        "TcpConnection owner EventLoop"
-      ],
-      "out_of_scope": [
-        "Multi-Reactor",
-        "RPC",
-        "Coroutine"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/event_loop.*",
-          "nebula/net/channel.*",
-          "nebula/net/tcp_connection.*"
-        ],
-        "evidence": [
+          "可编译源码",
           "echo test",
-          "日志/strace"
+          "最小 RPC 测试",
+          "Sanitizer 结果",
+          "Git commit"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S1-02",
-      "stage": "1",
-      "order": 7,
-      "title": "Partial Write 与 EPOLLOUT 生命周期",
-      "capability": "能够稳定复现并正确处理 nonblocking socket partial write，明确剩余 bytes 所有权与 EPOLLOUT 开关不变量。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§8.4 / §8.5 / §4.4",
-      "tasks": [
-        "人工降低 SO_SNDBUF 复现 partial write/EAGAIN",
-        "未写完数据进入 output buffer",
-        "buffer 清空后 disable EPOLLOUT，并验证无 busy loop"
-      ],
-      "must_learn": [
-        "partial write",
-        "EAGAIN",
-        "output buffer ownership",
-        "EPOLLOUT 动态开关"
-      ],
-      "out_of_scope": [
-        "writev 优化",
-        "zero-copy",
-        "io_uring"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/tcp_connection.*",
-          "tests/"
-        ],
-        "evidence": [
-          "partial-write test",
-          "CPU/busy-loop 观察"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S1-03",
-      "stage": "1",
-      "order": 8,
-      "title": "Connection Close 生命周期",
-      "capability": "能够区分 FIN/RST/read error/write error，并保证连接关闭后无 use-after-free、fd 泄漏或悬空 Buffer。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§8.5 / §17",
-      "tasks": [
-        "建立 peer FIN 场景",
-        "建立 peer RST / write error 场景",
-        "重复 connect/disconnect 并使用 sanitizer/计数验证生命周期"
-      ],
-      "must_learn": [
-        "FIN/RST",
-        "fd lifecycle",
-        "callback lifetime",
-        "owner EventLoop"
-      ],
-      "out_of_scope": [
-        "完整 graceful shutdown",
-        "RPC PendingCall close 语义"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/tcp_connection.*",
-          "tests/"
-        ],
-        "evidence": [
-          "fault test",
-          "ASan/UBSan"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S1-04",
-      "stage": "1",
-      "order": 9,
-      "title": "Connector/TcpClient 事件驱动恢复",
-      "capability": "能够恢复最小 Connector/TcpClient，使连接建立、收包与发送全部由 EventLoop 驱动。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§8 / §35",
-      "tasks": [
-        "恢复 Connector/TcpClient 最小路径",
-        "完成 client↔server async read/write integration test",
-        "确认客户端网络收包无需额外 ReceiverThread"
-      ],
-      "must_learn": [
-        "Connector",
-        "TcpClient",
-        "EventLoop-driven I/O",
-        "connection lifecycle"
-      ],
-      "out_of_scope": [
-        "RPC multiplexing",
-        "Connection Pool",
-        "Retry"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/connector.*",
-          "nebula/net/tcp_client.*"
-        ],
-        "evidence": [
-          "integration test",
-          "线程列表/日志"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S1-05",
-      "stage": "1",
-      "order": 10,
-      "title": "最小网络 Runtime Stage 1 验收",
-      "capability": "能够在 1B/1KB/1MB、partial write、对端中途关闭、重复连接与 1000 长连接场景下证明最小网络 Runtime 稳定。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§8.5 / §8.6",
-      "tasks": [
-        "执行 1B/1KB/1MB echo 测试",
-        "执行 partial write、peer close、重复 connect/disconnect",
-        "执行 1000 长连接与 ASan/UBSan 验收并记录结果"
-      ],
-      "must_learn": [
-        "网络 Runtime 的正确性边界",
-        "压力场景下生命周期稳定性",
-        "Stage 1 Exit Criteria"
-      ],
-      "out_of_scope": [
-        "Multi-Reactor 扩展",
-        "RPC"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tests/",
-          "docs/why/"
-        ],
-        "evidence": [
-          "测试报告",
-          "sanitizer 结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S2-01",
+      "id": "NRPC-N1-01",
       "stage": "2",
-      "order": 11,
-      "title": "Frame V2 协议边界与硬限制",
-      "capability": "能够定义并实现 Frame V2 固定头、网络字节序及 MAX_HEADER/BODY/FRAME 硬限制，并说明每个字段存在的理由。",
+      "order": 4,
+      "title": "Event-Driven Async RPC",
+      "capability": "把旧 ReceiverThread + wait_for 主模型改造成 EventLoop 驱动的真正异步 RPC，使同一连接支持大量并发 inflight 请求且响应可乱序返回。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§9.2",
+      "source_section": "§4.1",
       "tasks": [
-        "固化 Frame V2 字段与字节序",
-        "定义 MAX_HEADER_SIZE/MAX_BODY_SIZE/MAX_FRAME_SIZE",
-        "为 magic/version/length 边界写单测"
+        "定义 CallAsync 非阻塞语义、callback 线程语义与对象所有权",
+        "把响应解析接入 EventLoop read path，删除主路径 ReceiverThread 依赖",
+        "实现 RequestId -> PendingCall 的事件驱动完成路径",
+        "验证至少 1000 inflight 且响应乱序时无串包、无阻塞等待"
       ],
       "must_learn": [
-        "Frame header",
-        "network byte order",
-        "length hard limit",
-        "ProtocolError/Close policy"
-      ],
-      "out_of_scope": [
-        "Protobuf Service",
-        "Compression",
-        "Coroutine"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/protocol/frame.h",
-          "tests/"
-        ],
-        "evidence": [
-          "单测",
-          "协议说明"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S2-02",
-      "stage": "2",
-      "order": 12,
-      "title": "Incremental Frame Parser",
-      "capability": "能够从 TCP 字节流中增量恢复 Frame，并正确处理任意切片、多帧拼接、半包、非法长度与协议失步。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§9.3 / §9.6",
-      "tasks": [
-        "实现 NeedMore/Frame/ProtocolError 解析路径",
-        "完成 1 frame 分 100 次、100 frame 一次写和随机切片测试",
-        "非法长度必须在内存分配前拒绝，明确关闭/skip 策略"
-      ],
-      "must_learn": [
-        "TCP 无消息边界",
-        "incremental parser",
-        "length validation",
-        "stream synchronization"
-      ],
-      "out_of_scope": [
-        "RPC dispatch",
-        "Coroutine"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/protocol/frame_parser.*",
-          "tests/"
-        ],
-        "evidence": [
-          "随机切片测试",
-          "恶意输入测试"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S2-03",
-      "stage": "2",
-      "order": 13,
-      "title": "RequestId 与 PendingCall V1",
-      "capability": "能够在 EventLoop 所有权下完成 RequestId 分配、PendingCall 注册、Response 匹配、完成与删除。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§9.4 / §9.6",
-      "tasks": [
-        "实现 RequestId 分配与唯一性检查",
-        "实现 PendingCall map 注册/查找/erase",
-        "unknown id 与 duplicate response 有明确行为"
-      ],
-      "must_learn": [
-        "RequestId",
+        "nonblocking CallAsync",
         "PendingCall ownership",
-        "register-before-send",
-        "unknown/duplicate response"
+        "event-driven completion",
+        "乱序响应匹配"
       ],
       "out_of_scope": [
-        "Timeout/Cancel",
-        "Coroutine",
-        "跨线程无锁 map"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/rpc/pending_call.*",
-          "nebula/rpc/rpc_client.*"
-        ],
-        "evidence": [
-          "单测",
-          "integration test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S2-04",
-      "stage": "2",
-      "order": 14,
-      "title": "1000 Inflight 乱序响应验证",
-      "capability": "能够在单连接 1000 个以上 inflight RPC、随机乱序 Response 下做到 100% 正确匹配且无丢失/重复完成。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§9.7 / §6",
-      "tasks": [
-        "构造 1000+ inflight 测试",
-        "服务端随机延迟制造乱序 Response",
-        "统计 lost/duplicate/unknown completion 必须为 0"
-      ],
-      "must_learn": [
-        "multiplexing",
-        "out-of-order response",
-        "PendingCall lifecycle"
-      ],
-      "out_of_scope": [
-        "Coroutine",
-        "Load Balancer"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tests/",
-          "benchmark/"
-        ],
-        "evidence": [
-          "测试日志",
-          "计数结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S2-05",
-      "stage": "2",
-      "order": 15,
-      "title": "Protobuf Adapter 与 Runtime 解耦",
-      "capability": "能够让 Message↔bytes 的 Protobuf adapter 与 Transport/PendingCall 解耦，并正确处理非法 payload。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§3.2 / §9.5",
-      "tasks": [
-        "实现最薄 Protobuf adapter",
-        "证明 RPC Core 面向 bytes/frame 而非具体 Message",
-        "非法 payload 返回 Decode Error 而不是 crash"
-      ],
-      "must_learn": [
-        "serialization boundary",
-        "Message↔bytes",
-        "decode error"
-      ],
-      "out_of_scope": [
-        "codegen",
-        "typed stub",
-        "service discovery"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/protocol/",
-          "nebula/rpc/"
-        ],
-        "evidence": [
-          "单测",
-          "非法 payload 测试"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S2-06",
-      "stage": "2",
-      "order": 16,
-      "title": "Stage 2 恢复区验收",
-      "capability": "能够证明 Parser + RequestId + PendingCall 已完成恢复，且不依赖 ReceiverThread 为 Response 单独收包。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§9.7 / §6",
-      "tasks": [
-        "汇总 Stage 2 全部测试",
-        "确认一条连接 1000 inflight 乱序正确",
-        "记录 Recovery Zone 完成条件与 Stage 3 入口"
-      ],
-      "must_learn": [
-        "Parser",
-        "PendingCall",
-        "EventLoop receive path",
-        "Recovery Zone exit"
-      ],
-      "out_of_scope": [
-        "CallAsync 设计",
-        "Coroutine"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/history/BREAKPOINT.md",
-          "tests/"
-        ],
-        "evidence": [
-          "Stage 2 验收报告"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S3-01",
-      "stage": "3",
-      "order": 17,
-      "title": "CallAsync 线程语义与所有权设计",
-      "capability": "能够定义 CallAsync 从任意线程进入 EventLoop 的最小线程模型，并明确 PendingCall/FrameParser/TcpConnection 的所有权。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§10.4~§10.6",
-      "tasks": [
-        "写出 CallAsync 调用线程→queueInLoop→owner EventLoop 的时序图",
-        "明确 PendingCall map/FrameParser/TcpConnection 所属线程",
-        "用 ADR 或 why note 记录 callback 默认执行线程"
-      ],
-      "must_learn": [
-        "CallAsync nonblocking contract",
-        "queueInLoop",
-        "single-thread ownership",
-        "callback executor V1"
-      ],
-      "out_of_scope": [
-        "Coroutine scheduler",
-        "lock-free MPSC"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/adr/",
-          "docs/why/"
-        ],
-        "evidence": [
-          "状态/时序图",
-          "设计记录"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S3-02",
-      "stage": "3",
-      "order": 18,
-      "title": "Event-Driven CallAsync 最小实现",
-      "capability": "能够实现立即返回的 callback Async RPC：注册 PendingCall、发送 Request、由 EventLoop 收到 Response 后完成 callback。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§10.2 / §10.3",
-      "tasks": [
-        "实现 RpcClient::CallAsync 最小 API",
-        "真正的 register pending + send 必须发生在 owner EventLoop",
-        "Response 经 FrameParser→OnFrame→PendingCall→callback 完成"
-      ],
-      "must_learn": [
-        "async completion",
-        "register-before-send",
-        "event-driven receive",
-        "callback completion"
-      ],
-      "out_of_scope": [
-        "Coroutine",
-        "Deadline/Cancel"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/rpc/rpc_client.*",
-          "tests/"
-        ],
-        "evidence": [
-          "integration test",
-          "线程/调用链日志"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S3-03",
-      "stage": "3",
-      "order": 19,
-      "title": "Connection Close 失败所有 PendingCall",
-      "capability": "能够在连接关闭时一次性、可预测地失败该连接全部 PendingCall，且不遗留悬空 callback。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§10.4 / §10.8",
-      "tasks": [
-        "构造大量 pending 后 peer close",
-        "实现/验证 close→fail all pending",
-        "统计 pending_count 最终归零且每次 completion 恰好一次"
-      ],
-      "must_learn": [
-        "connection close semantics",
-        "pending cleanup",
-        "completion exactly once 的前置约束"
-      ],
-      "out_of_scope": [
-        "Timeout race",
-        "Coroutine"
+        "协程",
+        "超时取消状态机",
+        "连接池"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
           "nebula/rpc/",
-          "tests/"
+          "tests/async_rpc/"
         ],
         "evidence": [
-          "close fault test",
-          "pending count"
+          "代码",
+          "并发测试",
+          "线程/调用链日志",
+          "Git commit"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S3-04",
-      "stage": "3",
-      "order": 20,
-      "title": "删除 ReceiverThread / wait_for 主执行模型",
-      "capability": "能够从 RPC 主路径中彻底移除 ReceiverThread、MSG_WAITALL 与业务线程 future.wait_for，并用证据证明调用线程不被 RPC 网络等待阻塞。",
+      "id": "NRPC-N1-02",
+      "stage": "2",
+      "order": 5,
+      "title": "Deadline / Cancel / Exactly-Once Completion",
+      "capability": "让 Response、Timeout、Cancel、Connection Close 等完成源竞争时，一个 RPC 只能进入一次终态，并能正确清理 PendingCall。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§10.1 / §10.8",
+      "source_section": "§4.2",
       "tasks": [
-        "删除/隔离旧 ReceiverThread 收包路径",
-        "删除 RPC 主路径中的 future.wait_for",
-        "通过线程列表/日志/测试证明网络收包全部由 EventLoop 驱动"
+        "设计统一 CompletionState 与终态迁移规则",
+        "接入 absolute deadline / timer 完成源",
+        "实现 cancel、late response、connection close 的竞争处理",
+        "建立 race/fault tests 验证 exactly-once completion 和资源清理"
       ],
       "must_learn": [
-        "旧同步模型问题",
-        "EventLoop completion",
-        "业务线程不阻塞"
+        "exactly-once completion",
+        "absolute deadline",
+        "cancel/late response",
+        "race handling"
       ],
       "out_of_scope": [
-        "Coroutine",
-        "Retry"
+        "复杂分布式重试",
+        "协程 API 美化"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
           "nebula/rpc/",
-          "tests/"
+          "nebula/base/timer*",
+          "tests/completion/"
         ],
         "evidence": [
-          "线程列表",
-          "grep 结果",
-          "integration test"
+          "状态机代码",
+          "race tests",
+          "故障日志",
+          "Sanitizer"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S3-05",
+      "id": "NRPC-N2-01",
       "stage": "3",
-      "order": 21,
-      "title": "Async RPC 高 Inflight 与旧模型对照",
-      "capability": "能够在 1000/10000 inflight 下测量新 Async RPC 的线程数、context switch、QPS、P99 与 pending 数，并与旧模型做一次可解释对照。",
+      "order": 6,
+      "title": "C++20 Coroutine RPC API",
+      "capability": "在已有 Async RPC 之上实现最小 Task<T>/Awaiter，使 co_await RPC 只是异步完成模型的语法层，而不是新线程或阻塞等待。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§10.7 / §10.8",
+      "source_section": "§5.1",
       "tasks": [
-        "固定 workload 跑 1000/10000 inflight",
-        "记录 threads/context switches/QPS/P99/pending/output buffer",
-        "与旧 promise/future+ReceiverThread 模型至少比较一个相同场景"
-      ],
-      "must_learn": [
-        "异步模型收益与代价",
-        "benchmark baseline",
-        "不把一次结果当结论"
-      ],
-      "out_of_scope": [
-        "性能优化",
-        "brpc/gRPC 对比"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "benchmark/",
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "原始结果",
-          "对照说明"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S4-01",
-      "stage": "4",
-      "order": 22,
-      "title": "最小 Task<T>/Task<void> 协程对象",
-      "capability": "能够实现并解释最小 C++20 Task<T>/Task<void> 的 coroutine frame、promise_type、initial/final suspend 与 continuation 生命周期。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§11.2",
-      "tasks": [
-        "实现最小 Task<T>/Task<void>",
-        "为 initial_suspend/final_suspend/return_value/unhandled_exception 写测试",
-        "画出 coroutine frame 创建到销毁的时间线"
+        "实现最小 Task<T>/Task<void> coroutine object 与生命周期",
+        "实现 RpcAwaiter，把 PendingCall completion 映射为 coroutine resume",
+        "提供 co_await client.Call(...) 最小 API 并跑通成功/失败路径",
+        "验证 1000 并发 coroutine RPC 不创建一请求一线程且不阻塞 EventLoop"
       ],
       "must_learn": [
         "coroutine frame",
-        "promise_type",
-        "initial/final suspend",
-        "continuation"
+        "suspend/resume",
+        "awaiter contract",
+        "coroutine != thread"
       ],
       "out_of_scope": [
-        "通用 Fiber Runtime",
-        "work stealing",
-        "RPC Awaiter"
+        "完整 scheduler 框架",
+        "generator",
+        "无关 coroutine utilities"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "nebula/coroutine/",
-          "tests/"
+          "nebula/coro/",
+          "nebula/rpc/",
+          "tests/coroutine/"
         ],
         "evidence": [
-          "单测",
-          "生命周期时间线"
+          "代码",
+          "并发测试",
+          "线程数证据",
+          "Git commit"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S4-02",
-      "stage": "4",
-      "order": 23,
-      "title": "RpcAwaiter suspend/resume 链路",
-      "capability": "能够把 Stage 3 callback completion 接成 await_suspend 保存 continuation、Response 完成后 resume、await_resume 返回结果的完整链路。",
+      "id": "NRPC-N2-02",
+      "stage": "3",
+      "order": 7,
+      "title": "Coroutine 生命周期与 Resume 线程语义",
+      "capability": "处理调用方提前销毁、超时、取消、连接关闭和 shutdown 时 coroutine frame 与 PendingCall 的生命周期，并明确默认恢复线程。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§11.3",
+      "source_section": "§5.2",
       "tasks": [
-        "实现 RpcAwaiter",
-        "await_suspend 中创建/绑定 PendingCall continuation",
-        "Response 到达后写入 RpcResult 并 resume，await_resume 返回结果"
+        "定义 coroutine frame、PendingCall 与连接对象的所有权关系",
+        "验证提前销毁/取消/超时后不会 double resume 或 use-after-free",
+        "定义并实现默认 resume executor/owner EventLoop 语义",
+        "用 ASan/TSan 或针对性压力测试验证生命周期边界"
       ],
       "must_learn": [
-        "await_ready/await_suspend/await_resume",
-        "coroutine_handle",
-        "PendingCall continuation"
+        "frame lifetime",
+        "resume executor",
+        "UAF/double resume",
+        "shutdown interaction"
       ],
       "out_of_scope": [
-        "Timeout/Cancel",
-        "Executor migration"
+        "通用工作窃取调度器",
+        "复杂跨进程 executor"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "nebula/coroutine/",
-          "nebula/rpc/"
+          "nebula/coro/",
+          "nebula/rpc/",
+          "tests/coroutine_lifetime/"
         ],
         "evidence": [
-          "co_await integration test"
+          "生命周期测试",
+          "Sanitizer",
+          "线程语义日志"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S4-03",
+      "id": "NRPC-N3-01",
       "stage": "4",
-      "order": 24,
-      "title": "Coroutine Frame 生命周期与提前销毁",
-      "capability": "能够处理 Task 提前销毁、Connection Close、完成后 frame 销毁等场景，避免悬空 coroutine_handle 与 double resume。",
+      "order": 8,
+      "title": "Multi-Reactor 与跨线程所有权",
+      "capability": "把单 Reactor 扩展为可测量的 Multi-Reactor，明确 fd/Connection/PendingCall 的 owner loop，并通过 command queue + eventfd 安全跨线程提交工作。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§11.4",
+      "source_section": "§6.1",
       "tasks": [
-        "构造 Task 等待 RPC 时外部对象提前销毁场景",
-        "构造 Connection Close 恢复错误结果",
-        "用 ASan/UBSan 验证 frame 生命周期"
+        "定义 EventLoopThread/LoopGroup 与连接分配策略",
+        "实现跨线程 command queue + eventfd 唤醒",
+        "固定 fd/Connection/PendingCall owner，禁止任意线程直接操作连接状态",
+        "对 1/2/4/8 Reactor 做扩展性实验并解释瓶颈"
       ],
       "must_learn": [
-        "coroutine ownership",
-        "frame destroy",
-        "close completion",
-        "handle safety"
+        "single-thread ownership",
+        "eventfd wakeup",
+        "command queue",
+        "reactor scaling"
       ],
       "out_of_scope": [
-        "Timeout race",
-        "跨线程 CAS"
+        "lock-free 炫技",
+        "NUMA 深度优化"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "tests/"
-        ],
-        "evidence": [
-          "ASan/UBSan",
-          "fault test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S4-04",
-      "stage": "4",
-      "order": 25,
-      "title": "Coroutine Resume 线程语义",
-      "capability": "能够明确并验证 RPC coroutine 默认在哪个 EventLoop 线程恢复，并说明为什么第一版不做复杂 scheduler migration。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§11.5",
-      "tasks": [
-        "记录 resume 线程规则 ADR",
-        "在多调用线程场景记录 suspend/resume thread id",
-        "验证 coroutine 在完成 RPC 的 owner EventLoop 恢复"
-      ],
-      "must_learn": [
-        "resume thread semantics",
-        "owner EventLoop",
-        "executor migration boundary"
-      ],
-      "out_of_scope": [
-        "ThreadPoolExecutor",
-        "work stealing"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/adr/",
-          "tests/"
-        ],
-        "evidence": [
-          "thread-id 日志",
-          "ADR"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S4-05",
-      "stage": "4",
-      "order": 26,
-      "title": "1000 并发 Coroutine RPC 验收",
-      "capability": "能够证明 1000+ suspended coroutine 不创建对应数量线程，Response 到达后每个协程准确恢复一次。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§11.6",
-      "tasks": [
-        "运行 1000+ concurrent co_await RPC",
-        "记录线程数与完成计数",
-        "验证 close/error 场景也能恢复并返回错误"
-      ],
-      "must_learn": [
-        "suspend 不占线程",
-        "exactly one resume 前置条件",
-        "coroutine stress"
-      ],
-      "out_of_scope": [
-        "Deadline/Cancel race"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tests/",
+          "nebula/net/",
+          "tests/multireactor/",
           "benchmark/"
         ],
         "evidence": [
-          "压力测试结果",
-          "线程计数"
+          "代码",
+          "扩展性数据",
+          "线程日志",
+          "profile"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S5-01",
-      "stage": "5",
-      "order": 27,
-      "title": "Completion Sources 与终态状态机",
-      "capability": "能够把 Response/Deadline/Cancel/ConnectionClose/ProtocolError/Shutdown/SendFailure 统一为一个只允许进入一次终态的 PendingCall 状态机。",
+      "id": "NRPC-N3-02",
+      "stage": "4",
+      "order": 9,
+      "title": "Backpressure 与资源上限",
+      "capability": "让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§12.1~§12.4",
+      "source_section": "§6.2",
       "tasks": [
-        "画完整 Completion State Machine",
-        "实现/封装 CompleteOnce 入口或同等单线程串行化机制",
-        "为重复 completion 写单测"
+        "实现 connection output high/low watermark 与 slow consumer 策略",
+        "实现 client inflight/pending 上限和 fail-fast/排队策略",
+        "为跨线程 command queue、timer 等关键资源定义边界",
+        "构造过载实验验证内存、错误率与 P99 在策略下可解释"
       ],
       "must_learn": [
-        "completion sources",
-        "terminal state",
-        "exactly-once invariant",
-        "single EventLoop serialization"
+        "backpressure",
+        "watermark",
+        "bounded queue",
+        "overload isolation"
       ],
       "out_of_scope": [
-        "Multi-Reactor",
-        "无锁算法"
+        "复杂自适应限流算法",
+        "服务网格"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "nebula/rpc/pending_call.*",
-          "docs/adr/"
-        ],
-        "evidence": [
-          "状态机",
-          "单测"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S5-02",
-      "stage": "5",
-      "order": 28,
-      "title": "Timer + Absolute Deadline",
-      "capability": "能够用最小 timerfd + min-heap/TimerQueue 实现绝对 Deadline，并使用 steady_clock 处理 RPC 超时预算。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§12.5 / §12.6",
-      "tasks": [
-        "实现/接入最小 TimerQueue",
-        "Call(timeout) 转为 absolute deadline",
-        "timer 到期统一进入 CompleteOnce"
-      ],
-      "must_learn": [
-        "timerfd/min-heap",
-        "steady_clock",
-        "absolute deadline",
-        "remaining budget"
-      ],
-      "out_of_scope": [
-        "Timing Wheel",
-        "Retry"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/timer/",
-          "nebula/rpc/"
-        ],
-        "evidence": [
-          "timer 单测",
-          "deadline integration test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S5-03",
-      "stage": "5",
-      "order": 29,
-      "title": "Cancel / Late Response 语义",
-      "capability": "能够定义用户取消与超时后的 Late Response 行为，保证已终态调用不会重新完成或重新创建状态。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§12.7",
-      "tasks": [
-        "实现 user cancel completion",
-        "构造 timeout 后 late response",
-        "记录 late_response_total 或等价指标并丢弃已终态响应"
-      ],
-      "must_learn": [
-        "cancel semantics",
-        "late response",
-        "terminal state immutability"
-      ],
-      "out_of_scope": [
-        "Retry",
-        "Observability 全体系"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
+          "nebula/net/",
           "nebula/rpc/",
-          "tests/"
+          "tests/backpressure/",
+          "benchmark/"
         ],
         "evidence": [
-          "late-response 测试",
-          "计数"
+          "过载测试",
+          "内存/P99 数据",
+          "代码",
+          "故障日志"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S5-04",
+      "id": "NRPC-N4-01",
       "stage": "5",
-      "order": 30,
-      "title": "Completion Race Suite",
-      "capability": "能够主动构造 Response/Timeout/Cancel/Close/Shutdown 的临界竞态并证明每个 RPC completion/resume 次数严格为 1。",
+      "order": 10,
+      "title": "Client Runtime：连接池、负载均衡与重试",
+      "capability": "形成可用于真实客户端的异步连接管理：连接池、静态服务发现、基础负载均衡与受 deadline/幂等约束的重试。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§12.8 / §12.9",
+      "source_section": "§7.1",
       "tasks": [
-        "构造 response 比 timeout 早/晚的临界场景",
-        "构造 response+cancel、cancel+close、shutdown+response",
-        "循环压测扩大 race，并运行 TSan（环境允许时）"
+        "实现异步 connection pool 与连接健康/重连",
+        "实现 static resolver 与 least-connections/round-robin 对照",
+        "实现 retry budget，并受幂等性与 absolute deadline 约束",
+        "用多后端测试验证连接分配、故障切换与重试不会放大请求"
       ],
       "must_learn": [
-        "race reproduction",
-        "exactly-once completion",
-        "double callback/resume prevention"
+        "connection pool",
+        "load balancing",
+        "retry semantics",
+        "deadline propagation"
       ],
       "out_of_scope": [
-        "Multi-Reactor 性能"
+        "注册中心集群",
+        "复杂熔断平台"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "tests/"
+          "nebula/client/",
+          "nebula/rpc/",
+          "tests/client_runtime/"
         ],
         "evidence": [
-          "race suite",
-          "TSan/计数结果"
+          "多后端测试",
+          "故障切换日志",
+          "代码"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S5-05",
+      "id": "NRPC-N4-02",
       "stage": "5",
-      "order": 31,
-      "title": "Shutdown 下挂起调用收尾",
-      "capability": "能够在 Runtime Shutdown 时唤醒/完成所有 suspended calls，取消 timers，并确保无 PendingCall 泄漏或悬空 coroutine。",
+      "order": 11,
+      "title": "Observability / Fault / Graceful Shutdown",
+      "capability": "让系统能够通过 metrics、trace 和 fault tests 定位尾延迟与资源泄漏，并在 shutdown 中正确收尾连接、请求与协程。",
+      "execution_mode": "BUILD",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§12.9 / §17",
+      "source_section": "§7.2",
       "tasks": [
-        "构造大量 suspended calls 后 shutdown",
-        "验证所有 PendingCall 进入明确终态",
-        "检查 timer/pending/coroutine frame 全部收尾"
+        "实现 Counter/Gauge/Histogram 与 EventLoop lag 等核心指标",
+        "实现 RequestId debug trace 或等价低成本追踪",
+        "建立连接/协议/慢消费者/超时等 fault matrix",
+        "实现 graceful shutdown 状态机并验证 pending/coroutine/connection 清理"
       ],
       "must_learn": [
-        "shutdown completion",
-        "pending cleanup",
-        "coroutine cleanup"
+        "metrics",
+        "tail latency observability",
+        "fault injection",
+        "graceful shutdown"
       ],
       "out_of_scope": [
-        "完整 graceful drain 策略"
+        "完整 Prometheus 平台",
+        "分布式 tracing 系统"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "tests/"
+          "nebula/observability/",
+          "tests/fault/",
+          "tests/shutdown/"
         ],
         "evidence": [
-          "shutdown fault test",
-          "sanitizer"
+          "指标输出",
+          "故障测试",
+          "shutdown 测试",
+          "资源清理证据"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S6-01",
+      "id": "NRPC-N5-01",
       "stage": "6",
-      "order": 32,
-      "title": "Multi-Reactor RPC 所有权模型",
-      "capability": "能够从 RPC Runtime 角度明确 Connection/PendingCall/Timer/Coroutine 的 Reactor 归属，并保持连接生命周期不跨 loop 漂移。",
+      "order": 12,
+      "title": "Benchmark / Profile / 性能优化闭环",
+      "capability": "建立可靠性能基线，使用 perf/flamegraph 等工具定位真实热点，并至少完成一个有效优化和一个失败优化回退案例。",
+      "execution_mode": "VALIDATE",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§13.1 / §13.2",
+      "source_section": "§8.1",
       "tasks": [
-        "写 one-loop-per-thread RPC ownership ADR",
-        "明确 Connection/PendingCall/Timer/Coroutine resume 所属 loop",
-        "为错误跨 loop 操作增加断言或可观测证据"
+        "固定机器、Release 参数、payload、并发、连接数、warm-up 与测试时长",
+        "记录 QPS、P50/P99/P999、CPU、内存和线程等 baseline",
+        "使用 perf/flamegraph 定位热点并完成至少一个有数据支撑的优化",
+        "保留至少一个没有收益或有副作用的优化实验及回退原因"
       ],
       "must_learn": [
-        "one loop per thread",
-        "RPC state ownership",
-        "thread affinity contract"
+        "reproducible benchmark",
+        "profile-driven optimization",
+        "tail latency",
+        "failed optimization evidence"
       ],
       "out_of_scope": [
-        "lock-free shared map",
-        "NUMA"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/adr/",
-          "nebula/net/",
-          "nebula/rpc/"
-        ],
-        "evidence": [
-          "ADR",
-          "断言/日志"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S6-02",
-      "stage": "6",
-      "order": 33,
-      "title": "跨线程 Command Queue + eventfd",
-      "capability": "能够让 foreign thread 通过有界 command queue + eventfd 投递操作，由 owner EventLoop 执行，避免直接跨线程修改 Connection。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§13.3",
-      "tasks": [
-        "实现/恢复跨线程 queueInLoop/post",
-        "eventfd wakeup owner EventLoop",
-        "为 command queue 建立容量/拒绝策略或至少明确 V1 边界"
-      ],
-      "must_learn": [
-        "cross-thread handoff",
-        "eventfd",
-        "owner executes",
-        "bounded queue"
-      ],
-      "out_of_scope": [
-        "lock-free MPSC"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/",
-          "tests/"
-        ],
-        "evidence": [
-          "跨线程投递测试",
-          "queue depth"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S6-03",
-      "stage": "6",
-      "order": 34,
-      "title": "1/2/4/8 Reactor 扩展实验",
-      "capability": "能够在固定 workload 下测量 1/2/4/8 Reactor 的 QPS/P99/CPU/context switch，并解释扩展何时停止。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§13.4 / §13.5",
-      "tasks": [
-        "固定 workload 和机器参数",
-        "运行 1/2/4/8 Reactor",
-        "记录并解释扩展曲线，不把线程更多等同于性能更高"
-      ],
-      "must_learn": [
-        "scaling curve",
-        "CPU utilization",
-        "context switch",
-        "bottleneck explanation"
-      ],
-      "out_of_scope": [
-        "NUMA",
-        "io_uring"
+        "没有 profile 就做对象池/零拷贝",
+        "只晒单次跑分"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
           "benchmark/",
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "扩展曲线原始数据",
-          "解释"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S6-04",
-      "stage": "6",
-      "order": 35,
-      "title": "CPU Affinity 可选实验与 Stage 6 验收",
-      "capability": "能够把 CPU affinity 当实验变量而不是默认优化，并完成 Multi-Reactor ownership/投递/扩展的统一验收。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§13.5",
-      "tasks": [
-        "可选：绑定 worker CPU 并与未绑核对照",
-        "确认 Connection 不跨 loop、PendingCall ownership 明确",
-        "形成 Stage 6 验收记录"
-      ],
-      "must_learn": [
-        "affinity tradeoff",
-        "ownership invariant",
-        "multi-core exit criteria"
-      ],
-      "out_of_scope": [
-        "NUMA 深入"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
           "docs/benchmark/",
-          "docs/why/"
+          "docs/performance/"
         ],
         "evidence": [
-          "对照数据或明确跳过原因",
-          "Stage 6 报告"
+          "原始数据",
+          "命令",
+          "profile",
+          "前后对比",
+          "Git commit"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S7-01",
-      "stage": "7",
-      "order": 36,
-      "title": "Output Watermark 与 Slow Consumer 边界",
-      "capability": "能够为每连接 output buffer 定义 Low/High/Hard Limit，并在 slow consumer 下保持进程内存有界。",
+      "id": "NRPC-N5-02",
+      "stage": "6",
+      "order": 13,
+      "title": "与 bRPC / gRPC 的公平验证",
+      "capability": "用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。",
+      "execution_mode": "VALIDATE",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§14.1 / §14.2 / §14.4",
+      "source_section": "§8.2",
       "tasks": [
-        "实现 output watermarks",
-        "High 时触发 backpressure/reject，Hard 时明确 fail/close 策略",
-        "构造 peer 不读数据的 slow consumer"
-      ],
-      "must_learn": [
-        "output buffer bound",
-        "watermark",
-        "slow consumer",
-        "memory boundedness"
-      ],
-      "out_of_scope": [
-        "自适应并发控制"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/",
-          "tests/"
-        ],
-        "evidence": [
-          "RSS/output_buffer 指标",
-          "slow consumer test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S7-02",
-      "stage": "7",
-      "order": 37,
-      "title": "Inflight / Pending 上限与 Fail-Fast",
-      "capability": "能够为 per-connection/global PendingCall 设置上限，并明确达到上限时 Reject/Bounded Queue/Load Shed 行为。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§14.3",
-      "tasks": [
-        "加入 per-connection inflight limit",
-        "加入 global pending limit",
-        "达到上限时验证不会创建无界等待队列"
-      ],
-      "must_learn": [
-        "inflight budget",
-        "fail-fast",
-        "bounded waiting"
-      ],
-      "out_of_scope": [
-        "adaptive concurrency"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/rpc/",
-          "tests/"
-        ],
-        "evidence": [
-          "limit tests",
-          "rejected count"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S7-03",
-      "stage": "7",
-      "order": 38,
-      "title": "跨线程队列与 Timer 等资源边界",
-      "capability": "能够检查 command queue、timer、connection 等关键资源是否有界，并为 limit 配置指标与测试。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§14.1 / §14.5",
-      "tasks": [
-        "列出所有关键可增长资源",
-        "为 command queue/timer/connection 等至少建立 limit+metric",
-        "写超限测试"
-      ],
-      "must_learn": [
-        "resource inventory",
-        "bounded queue",
-        "metric for limit"
-      ],
-      "out_of_scope": [
-        "Metrics 全体系"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/why/",
-          "tests/"
-        ],
-        "evidence": [
-          "资源边界清单",
-          "超限测试"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S7-04",
-      "stage": "7",
-      "order": 39,
-      "title": "Overload 隔离验收",
-      "capability": "能够证明恶意/极慢客户端存在时正常客户端仍可服务，RSS 有界，拒绝/关闭原因可观测。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§14.5",
-      "tasks": [
-        "同时运行 slow consumer 与正常客户端",
-        "记录正常客户端 P99/QPS 与进程 RSS",
-        "验证拒绝/关闭原因和 queue depth 可见"
-      ],
-      "must_learn": [
-        "overload isolation",
-        "resource boundedness",
-        "normal-client protection"
-      ],
-      "out_of_scope": [
-        "自适应控制"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tests/",
-          "benchmark/"
-        ],
-        "evidence": [
-          "混合负载结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S8-01",
-      "stage": "8",
-      "order": 40,
-      "title": "异步 Connection Pool",
-      "capability": "能够在一个 endpoint 下管理多条异步 Connection，并定义连接不可用、新连接建立和 pending budget 的行为。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§15.1 / §15.2",
-      "tasks": [
-        "实现每 endpoint 固定 N connections",
-        "connection close 自动摘除/重建策略",
-        "不产生无界 pending"
-      ],
-      "must_learn": [
-        "endpoint pool",
-        "connection lifecycle",
-        "pending budget"
-      ],
-      "out_of_scope": [
-        "Service Discovery",
-        "高级健康检查"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/client/",
-          "tests/"
-        ],
-        "evidence": [
-          "pool integration test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S8-02",
-      "stage": "8",
-      "order": 41,
-      "title": "Load Balancing 对照实验",
-      "capability": "能够实现至少两种简单 LB，并用 workload 解释选择依据，而不是因为算法更高级就默认采用。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§15.2",
-      "tasks": [
-        "实现 Round Robin",
-        "实现 Least Pending 或 Power of Two Choices",
-        "固定 workload 对照并记录 QPS/P99/分布"
-      ],
-      "must_learn": [
-        "LB selection",
-        "least pending",
-        "workload-driven decision"
-      ],
-      "out_of_scope": [
-        "EWMA 高级策略"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/load_balance/",
-          "benchmark/"
-        ],
-        "evidence": [
-          "对照实验"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S8-03",
-      "stage": "8",
-      "order": 42,
-      "title": "Retry 幂等 / Deadline 语义",
-      "capability": "能够区分请求是否可能已执行、方法是否幂等、Deadline 是否仍有预算，并避免失败即重试导致重复执行或 retry storm。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§15.3",
-      "tasks": [
-        "定义允许自动 retry 的错误集合",
-        "非幂等默认不自动 retry",
-        "把 retry 次数/退避与剩余 deadline 绑定"
-      ],
-      "must_learn": [
-        "idempotency",
-        "deadline budget",
-        "retry amplification",
-        "send state"
-      ],
-      "out_of_scope": [
-        "复杂 hedging"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/client/",
-          "docs/adr/"
-        ],
-        "evidence": [
-          "retry fault tests",
-          "ADR"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S8-04",
-      "stage": "8",
-      "order": 43,
-      "title": "Static Resolver 与 Client Runtime 验收",
-      "capability": "能够用最小 StaticResolver 完成多 endpoint 调用，并证明 pool/LB/retry 都受资源边界和 Deadline 约束。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§15.4 / §15.5",
-      "tasks": [
-        "实现 StaticResolver 接口",
-        "一个 endpoint down 时按明确策略切换/失败",
-        "完成 Client Runtime exit criteria"
-      ],
-      "must_learn": [
-        "resolver abstraction",
-        "endpoint health boundary",
-        "client runtime integration"
-      ],
-      "out_of_scope": [
-        "etcd/Consul"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/client/",
-          "tests/"
-        ],
-        "evidence": [
-          "multi-endpoint test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S9-01",
-      "stage": "9",
-      "order": 44,
-      "title": "核心 Metrics：Counter/Gauge/Histogram",
-      "capability": "能够为请求、错误、连接、pending、buffer、queue、latency 建立低基数指标，并区分 Counter/Gauge/Histogram。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§16.1 / §16.4",
-      "tasks": [
-        "实现/接入最小 metrics primitives",
-        "加入核心 counters/gauges/histograms",
-        "禁止 request_id 等高基数 label"
-      ],
-      "must_learn": [
-        "Counter/Gauge/Histogram",
-        "cardinality",
-        "latency histogram"
-      ],
-      "out_of_scope": [
-        "完整 OpenTelemetry"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/metrics/",
-          "tests/"
-        ],
-        "evidence": [
-          "metrics 输出",
-          "单测"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S9-02",
-      "stage": "9",
-      "order": 45,
-      "title": "EventLoop Lag",
-      "capability": "能够测量 expected run time 与 actual run time 的差值，并用它识别 EventLoop 被同步阻塞或长任务卡住。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§16.2",
-      "tasks": [
-        "实现周期性 lag probe",
-        "构造同步阻塞/长 handler 场景",
-        "验证 lag 指标明显变化"
-      ],
-      "must_learn": [
-        "event-loop lag",
-        "scheduler delay",
-        "blocking detection"
-      ],
-      "out_of_scope": [
-        "CPU profiler 全体系"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/metrics/",
-          "tests/"
-        ],
-        "evidence": [
-          "lag 场景结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S9-03",
-      "stage": "9",
-      "order": 46,
-      "title": "RequestId Debug Trace",
-      "capability": "能够按 RequestId 记录 created/queued/write/response/completion/resume 等有限采样事件，并保持容量有界。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§16.3",
-      "tasks": [
-        "实现轻量采样 trace",
-        "记录关键阶段时间点",
-        "设置容量/采样限制避免无界增长"
-      ],
-      "must_learn": [
-        "debug trace",
-        "sampling",
-        "bounded retention"
-      ],
-      "out_of_scope": [
-        "完整 distributed tracing"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/debug/"
-        ],
-        "evidence": [
-          "trace sample",
-          "容量测试"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S9-04",
-      "stage": "9",
-      "order": 47,
-      "title": "仅靠指标定位一次 P99 异常",
-      "capability": "能够在一次人为制造的 P99 突增中，先通过 metrics 判断 queue/event-loop/network/timeout/output backlog 中的主要方向，而不是先改代码。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§16.5",
-      "tasks": [
-        "制造一个可重复的延迟异常",
-        "只看已有 metrics/trace 提出根因假设",
-        "用第二种证据验证假设并形成诊断记录"
-      ],
-      "must_learn": [
-        "observability-driven diagnosis",
-        "P99",
-        "hypothesis/evidence"
-      ],
-      "out_of_scope": [
-        "性能优化"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/why/",
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "诊断报告",
-          "指标截图/文本"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S10-01",
-      "stage": "10",
-      "order": 48,
-      "title": "Fault Matrix：连接与协议异常",
-      "capability": "能够系统化覆盖 connect refused/timeout、RST/FIN、partial frame、invalid magic、oversized frame 等异常，并定义每类终态。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§17.1",
-      "tasks": [
-        "建立 fault matrix 表",
-        "自动化至少 connect/RST/FIN/protocol-error 场景",
-        "检查 PendingCall/Connection/metrics 对应状态"
-      ],
-      "must_learn": [
-        "fault matrix",
-        "protocol failure",
-        "connection terminal behavior"
-      ],
-      "out_of_scope": [
-        "packet loss 深度性能分析"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tests/",
-          "docs/why/"
-        ],
-        "evidence": [
-          "fault test logs"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S10-02",
-      "stage": "10",
-      "order": 49,
-      "title": "Connection Close 完整资源清理",
-      "capability": "能够在 close 时按顺序 remove poller、stop writes、fail pending、cancel timers、release buffers、notify pool，并在 owner loop 销毁。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§17.3",
-      "tasks": [
-        "把 close cleanup 写成明确流程/状态",
-        "为每项资源建立可验证测试",
-        "重复关闭/异常关闭下保持幂等"
-      ],
-      "must_learn": [
-        "close cleanup order",
-        "owner-loop destruction",
-        "idempotent cleanup"
-      ],
-      "out_of_scope": [
-        "Graceful shutdown 整体状态"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/net/",
-          "nebula/rpc/",
-          "tests/"
-        ],
-        "evidence": [
-          "资源计数",
-          "sanitizer"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S10-03",
-      "stage": "10",
-      "order": 50,
-      "title": "Graceful Shutdown 状态机",
-      "capability": "能够实现 Running→Draining→StopNewCalls→WaitUntilDeadline→CancelRemaining→Close→Stopped，并明确每阶段允许的操作。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§17.2",
-      "tasks": [
-        "实现/记录 shutdown state machine",
-        "draining 时拒绝新调用并等待 inflight",
-        "grace deadline 到达后取消剩余调用并退出"
-      ],
-      "must_learn": [
-        "draining",
-        "grace deadline",
-        "stop new calls",
-        "cancel remaining"
-      ],
-      "out_of_scope": [
-        "进程编排/容器平台"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/",
-          "docs/adr/"
-        ],
-        "evidence": [
-          "shutdown integration test"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S10-04",
-      "stage": "10",
-      "order": 51,
-      "title": "自动化 Fault + Shutdown 验收",
-      "capability": "能够让 fault suite 在 sanitizer 下自动运行，并证明异常后无 pending 泄漏、无悬空 coroutine、可重复启停。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§17.4",
-      "tasks": [
-        "将 fault 场景脚本/测试自动化",
-        "多轮 start/stop",
-        "ASan/UBSan/TSan 可用配置下跑关键异常路径"
-      ],
-      "must_learn": [
-        "fault automation",
-        "leak detection",
-        "restart stability"
-      ],
-      "out_of_scope": [
-        "正式性能数字"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tests/",
-          "scripts/"
-        ],
-        "evidence": [
-          "自动化结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S11-01",
-      "stage": "11",
-      "order": 52,
-      "title": "性能 Baseline + Profile 闭环",
-      "capability": "能够在固定 workload 下建立 baseline，用 perf/strace/pidstat 等证据定位真实热点，并提出单一可证伪假设。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§18.1~§18.3",
-      "tasks": [
-        "固定一个性能 workload 与 baseline",
-        "采集 perf stat/record 或等价证据",
-        "只选择一个主要热点写 Problem/Evidence/Hypothesis"
-      ],
-      "must_learn": [
-        "baseline",
-        "profile",
-        "hypothesis",
-        "one-major-change rule"
-      ],
-      "out_of_scope": [
-        "直接写内存池",
-        "io_uring 重写"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "profile 结果",
-          "假设记录"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S11-02",
-      "stage": "11",
-      "order": 53,
-      "title": "第一个真实性能优化案例",
-      "capability": "能够基于 profile 证据完成一个单变量优化，记录 Before/After/Tradeoff，并在无收益时回退。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§18.4 / §18.5",
-      "tasks": [
-        "选择真实热点实施一次修改",
-        "同 workload 重跑 benchmark",
-        "写 Problem/Evidence/Hypothesis/Change/Before/After/Tradeoff/Decision"
-      ],
-      "must_learn": [
-        "evidence-driven optimization",
-        "before/after",
-        "tradeoff"
-      ],
-      "out_of_scope": [
-        "第二个优化",
-        "框架 benchmark"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "优化报告",
-          "commit before/after"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S11-03",
-      "stage": "11",
-      "order": 54,
-      "title": "第二个独立性能优化案例",
-      "capability": "能够对不同热点再完成一个独立优化闭环，避免把第一次经验机械套用到其他 workload。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§18.5",
-      "tasks": [
-        "重新 profile 选择第二个热点",
-        "实施一个主要变量修改",
-        "记录前后数据与适用 workload"
-      ],
-      "must_learn": [
-        "re-profile",
-        "workload specificity",
-        "optimization reproducibility"
-      ],
-      "out_of_scope": [
-        "高级研究分支"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "第二份优化报告"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S11-04",
-      "stage": "11",
-      "order": 55,
-      "title": "失败优化案例与回退",
-      "capability": "能够保留至少一个无收益或副作用更大的优化实验，并基于数据回退，而不是只保留成功故事。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§18.5 / §19",
-      "tasks": [
-        "选择一个合理但未必有效的假设",
-        "实施并测量",
-        "若无收益/副作用更大则回退并记录失败原因"
-      ],
-      "must_learn": [
-        "failed experiment",
-        "revert decision",
-        "negative evidence"
-      ],
-      "out_of_scope": [
-        "为了展示而伪造收益"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "失败优化报告",
-          "revert commit/说明"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S12-01",
-      "stage": "12",
-      "order": 56,
-      "title": "统一 Framework Benchmark Harness",
-      "capability": "能够为 NebulaRPC/brpc/gRPC 固定机器、payload、并发、连接、warm-up、时长和 Release 构建条件，形成公平测试框架。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§19.1~§19.3",
-      "tasks": [
-        "固定 benchmark environment",
-        "统一 Unary Echo/CPU-light/fixed-delay handler 语义",
-        "记录三框架版本与构建参数"
+        "建立 NebulaRPC/bRPC/gRPC 统一 unary benchmark harness",
+        "跑 payload × concurrency × connections 矩阵并保存原始数据",
+        "比较线程模型、连接模型、超时取消、backpressure 与可观测性设计",
+        "针对主要性能差距做一次源码/系统级归因并给出后续优化优先级"
       ],
       "must_learn": [
         "fair benchmark",
-        "same workload",
-        "release build",
-        "warm-up"
+        "framework tradeoff",
+        "gap attribution",
+        "benchmark methodology"
       ],
       "out_of_scope": [
-        "追求跑分胜负"
+        "为了赢跑分改变 workload",
+        "无证据宣称优于 bRPC/gRPC"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
-          "benchmark/",
-          "docs/benchmark/"
+          "benchmark/framework/",
+          "docs/benchmark/framework_comparison.md"
         ],
         "evidence": [
-          "统一命令",
-          "环境报告"
+          "三框架版本与命令",
+          "原始 CSV/日志",
+          "对照报告",
+          "profile"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }
       }
     },
     {
-      "id": "NRPC-S12-02",
-      "stage": "12",
-      "order": 57,
-      "title": "Payload/Concurrency/Connections Matrix",
-      "capability": "能够覆盖小消息、高并发、大消息三类代表性 workload，并输出 QPS/P50/P90/P99/P999/CPU/RSS/context switch/error。",
+      "id": "NRPC-FINAL-01",
+      "stage": "7",
+      "order": 14,
+      "title": "NebulaRPC v1.0 求职证据收束",
+      "capability": "把项目整理成可被 15~20k C++ 后端岗位追问和复现的技术作品：源码、测试、Benchmark、ADR、失败案例与面试叙事能够互相对应。",
+      "execution_mode": "VALIDATE",
       "priority": "CORE",
       "target_score": 80,
-      "source_section": "§19.2 / §19.3",
+      "source_section": "§9",
       "tasks": [
-        "选择代表性 payload/concurrency/connections 组合",
-        "重复运行并保存原始结果",
-        "生成统一结果表"
+        "整理 README、Architecture、关键状态机/时序图与 build/run 指南",
+        "为核心能力绑定 Git commit、测试、故障证据、benchmark/profile 证据",
+        "准备 60 秒项目介绍与 5 分钟深挖路径，覆盖网络/并发/协程/可靠性/性能取舍",
+        "从干净环境复现 build、tests、benchmark smoke 并打 v1.0 tag"
       ],
       "must_learn": [
-        "benchmark matrix",
-        "tail latency",
-        "resource metrics"
+        "problem->constraint->design->code->verification->data->tradeoff",
+        "可复现证据",
+        "面试深挖",
+        "版本封板"
       ],
       "out_of_scope": [
-        "优化结论"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "raw results",
-          "统一表格"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S12-03",
-      "stage": "12",
-      "order": 58,
-      "title": "框架差距定位与解释",
-      "capability": "能够从统一 benchmark 的明显差距出发，用 metrics/perf 定位原因，并把差距转化成可验证假设，而不是宣称谁更强。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§19.4",
-      "tasks": [
-        "选择一个明显 QPS/P99 差距",
-        "用 profile/metrics 定位主要因素",
-        "记录差距→证据→假设链"
-      ],
-      "must_learn": [
-        "gap analysis",
-        "profile evidence",
-        "framework tradeoff"
-      ],
-      "out_of_scope": [
-        "营销式结论"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "差距分析报告"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S12-04",
-      "stage": "12",
-      "order": 59,
-      "title": "Framework Benchmark Stage 验收",
-      "capability": "能够给出公平、可重复、带限制条件的框架对照报告，并明确 NebulaRPC 为简单性支付的成本和成熟框架的优势来源。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§19",
-      "tasks": [
-        "汇总统一 matrix 与差距分析",
-        "写 known limitations/实验限制",
-        "确保数字可追溯到 commit 与命令"
-      ],
-      "must_learn": [
-        "reproducible report",
-        "limitations",
-        "tradeoff explanation"
-      ],
-      "out_of_scope": [
-        "以单次截图证明性能"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "docs/benchmark/"
-        ],
-        "evidence": [
-          "最终 benchmark 报告"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S13-01",
-      "stage": "13",
-      "order": 60,
-      "title": "io_uring Transport Prototype",
-      "capability": "能够把 io_uring 作为独立 transport 实验，与 epoll 使用同一 workload 比较，而不是重写整个 Runtime。",
-      "priority": "OPTIONAL",
-      "target_score": 70,
-      "source_section": "§20.1",
-      "tasks": [
-        "独立实现最小 io_uring transport prototype",
-        "复用相同 benchmark workload",
-        "记录收益/代价与是否值得继续"
-      ],
-      "must_learn": [
-        "readiness vs completion",
-        "transport experiment"
-      ],
-      "out_of_scope": [
-        "重写全部 Runtime"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "experiments/io_uring/"
-        ],
-        "evidence": [
-          "对照结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S13-02",
-      "stage": "13",
-      "order": 61,
-      "title": "Timing Wheel 对照实验",
-      "capability": "能够在 heap timer 成为证据化瓶颈时比较 heap/hashed/hierarchical wheel 的 insert/cancel/expire/memory/precision。",
-      "priority": "OPTIONAL",
-      "target_score": 70,
-      "source_section": "§20.2",
-      "tasks": [
-        "确认 timer 是真实热点，否则记录不做",
-        "若热点成立，实现或接入 timing wheel prototype",
-        "同 workload 对照"
-      ],
-      "must_learn": [
-        "timer workload",
-        "timing wheel tradeoff"
-      ],
-      "out_of_scope": [
-        "无证据直接替换"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "experiments/timer/"
-        ],
-        "evidence": [
-          "对照结果"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S13-03",
-      "stage": "13",
-      "order": 62,
-      "title": "Per-Core / NUMA 研究",
-      "capability": "能够在硬件和 profile 证据支持时研究 per-core sharding/NUMA locality，并明确普通桌面环境下可跳过。",
-      "priority": "OPTIONAL",
-      "target_score": 70,
-      "source_section": "§20.3 / §20.4",
-      "tasks": [
-        "确认硬件/瓶颈是否支持研究",
-        "设计独立实验",
-        "记录结论或明确跳过原因"
-      ],
-      "must_learn": [
-        "per-core sharding",
-        "NUMA applicability"
-      ],
-      "out_of_scope": [
-        "在无 NUMA 环境强行制造课题"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "experiments/"
-        ],
-        "evidence": [
-          "实验/跳过依据"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S13-04",
-      "stage": "13",
-      "order": 63,
-      "title": "Adaptive Concurrency / TLS / Compression 选题",
-      "capability": "能够从高级分支中只选择一个有明确系统问题的课题，不同时开启多个。",
-      "priority": "OPTIONAL",
-      "target_score": 70,
-      "source_section": "§20.5 / §20.6",
-      "tasks": [
-        "从 adaptive concurrency/TLS/compression 中最多选一项",
-        "写清 Problem/Hypothesis/Keep-or-Revert 条件",
-        "完成独立实验或明确跳过"
-      ],
-      "must_learn": [
-        "single research branch",
-        "problem-driven experiment"
-      ],
-      "out_of_scope": [
-        "同时开多个高级分支"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "experiments/"
-        ],
-        "evidence": [
-          "实验报告"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S14-01",
-      "stage": "14",
-      "order": 64,
-      "title": "Typed API / Protobuf Service Model 收束",
-      "capability": "能够在 Runtime 主线稳定后改善 Typed Call/Service 使用体验，而不让 API 包装反客为主。",
-      "priority": "OPTIONAL",
-      "target_score": 70,
-      "source_section": "§21.1",
-      "tasks": [
-        "定义最小 typed Call API",
-        "保持 Runtime Core 与具体 Message 解耦",
-        "为错误模型写测试"
-      ],
-      "must_learn": [
-        "typed API",
-        "error model",
-        "adapter boundary"
-      ],
-      "out_of_scope": [
-        "重构 Runtime 核心"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "nebula/rpc/"
-        ],
-        "evidence": [
-          "API tests"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S14-02",
-      "stage": "14",
-      "order": 65,
-      "title": "protoc Codegen 可选实验",
-      "capability": "能够在确有价值时实现最小 codegen，把 IDL→generated API→runtime dispatch 链路讲清楚。",
-      "priority": "OPTIONAL",
-      "target_score": 70,
-      "source_section": "§21.1",
-      "tasks": [
-        "实现最小 protoc plugin 或明确跳过",
-        "生成 Stub/Service skeleton",
-        "记录 codegen 对 Runtime 的边界"
-      ],
-      "must_learn": [
-        "IDL/codegen/runtime dispatch"
-      ],
-      "out_of_scope": [
-        "把 codegen 当主线"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "tools/",
-          "examples/"
-        ],
-        "evidence": [
-          "生成代码/测试"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S15-01",
-      "stage": "15",
-      "order": 66,
-      "title": "v1.0 正确性与系统设计证据收束",
-      "capability": "能够把 unit/integration/fuzz/sanitizer/fault/race、ownership/state machine/backpressure/shutdown/retry 等证据整理为可审计的 v1.0 证明。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§21.2 / §33",
-      "tasks": [
-        "按毕业清单逐项核验正确性与系统设计",
-        "补缺失测试/ADR/why note",
-        "所有关键保证都能链接到真实证据"
-      ],
-      "must_learn": [
-        "v1.0 graduation checklist",
-        "correctness evidence",
-        "system design evidence"
-      ],
-      "out_of_scope": [
-        "新增业务功能"
+        "继续堆无关功能",
+        "只写漂亮 README 不保留原始证据"
       ],
       "project_anchor": {
         "project": "NebulaRPC",
         "path_base": "TARGET_PROJECT_ROOT",
         "paths": [
           "README.md",
-          "docs/",
-          "tests/"
+          "docs/architecture/",
+          "docs/adr/",
+          "docs/benchmark/"
         ],
         "evidence": [
-          "毕业清单"
+          "Git history",
+          "tests",
+          "benchmark/profile",
+          "ADR",
+          "v1.0 tag"
         ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
+        "note": "路径相对于 NebulaRPC 根目录。Recovery 节点只回顾旧项目；MIGRATE 节点允许 AI 辅助搬运并由学习者审查；BUILD 节点要求真实实现与验证。"
       },
       "scoring": {
         "minimums": {
           "explanation": 10,
           "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S15-02",
-      "stage": "15",
-      "order": 67,
-      "title": "README / Architecture / Benchmark 作品化",
-      "capability": "能够按真实演进关系编写 README，解释 MyMuduo+旧RPC→NebulaRPC 的断点、Async/Coroutine/Completion/Backpressure/Benchmark，而不是堆功能列表。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§21.3 / §21.4 / §34",
-      "tasks": [
-        "按 Master Plan 建议结构重写 README",
-        "加入架构图/Async RPC flow/Completion state machine/资源边界",
-        "链接 benchmark、failure experiments、ADRs 与 known limitations"
-      ],
-      "must_learn": [
-        "technical narrative",
-        "architecture explanation",
-        "known limitations"
-      ],
-      "out_of_scope": [
-        "简历夸张描述"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "README.md",
-          "docs/"
-        ],
-        "evidence": [
-          "README review"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
-          "diagnosis": 18,
-          "transfer": 14
-        }
-      }
-    },
-    {
-      "id": "NRPC-S15-03",
-      "stage": "15",
-      "order": 68,
-      "title": "v1.0 封版与技术叙事验收",
-      "capability": "能够不看代码完整讲述项目从历史断点到 Event-Driven Async RPC、Coroutine、Exactly-Once、Multi-Reactor、Backpressure、Observability、Performance 的因果链，并封版而不是继续加功能。",
-      "priority": "CORE",
-      "target_score": 80,
-      "source_section": "§29 / §33 / §34",
-      "tasks": [
-        "完成最终 v1.0 checklist",
-        "打 v1.0 tag 并冻结主线",
-        "进行一次闭卷项目技术叙事 Verification"
-      ],
-      "must_learn": [
-        "完整因果链",
-        "tradeoffs",
-        "封版意识",
-        "可验证技术叙事"
-      ],
-      "out_of_scope": [
-        "继续无限加功能"
-      ],
-      "project_anchor": {
-        "project": "NebulaRPC",
-        "path_base": "TARGET_PROJECT_ROOT",
-        "paths": [
-          "README.md",
-          "CHANGELOG.md"
-        ],
-        "evidence": [
-          "v1.0 tag",
-          "最终 Verification"
-        ],
-        "note": "这里的路径属于 NebulaRPC 目标仓库，不属于 LearningCI/docs。"
-      },
-      "scoring": {
-        "minimums": {
-          "explanation": 10,
-          "prediction": 10,
-          "implementation": 20,
+          "implementation": 18,
           "diagnosis": 18,
           "transfer": 14
         }

@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-N3-02",
+  "node_title": "Backpressure 与资源上限",
+  "source_plan_version": "0.4-simple-mainline",
+  "source_section": "§6.2",
+  "compiler": {
+    "type": "LearningCI 简化执行包生成器",
+    "status": "REVIEWED",
+    "note": "v0.4 默认执行包已可直接开始；只有节点确实过大或边界不清时才使用节点准备重新细化。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "main",
+      "title": "Backpressure 与资源上限 · 主任务",
+      "description": "保持节点完整，不再人为拆成二三十个碎片任务。",
+      "items": [
+        {
+          "id": "NRPC-N3-02-T01",
+          "title": "实现 connection output high/low watermark 与 slow consumer 策略",
+          "detail": "实现 connection output high/low watermark 与 slow consumer 策略",
+          "purpose": "让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N3-02-T02",
+          "title": "实现 client inflight/pending 上限和 fail-fast/排队策略",
+          "detail": "实现 client inflight/pending 上限和 fail-fast/排队策略",
+          "purpose": "让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N3-02-T03",
+          "title": "为跨线程 command queue、timer 等关键资源定义边界",
+          "detail": "为跨线程 command queue、timer 等关键资源定义边界",
+          "purpose": "让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N3-02-T04",
+          "title": "构造过载实验验证内存、错误率与 P99 在策略下可解释",
+          "detail": "构造过载实验验证内存、错误率与 P99 在策略下可解释",
+          "purpose": "让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。",
+          "estimated_minutes": 40,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N3-02-V01",
+          "title": "运行针对性测试并保留失败/修复证据",
+          "detail": "运行针对性测试并保留失败/修复证据",
+          "purpose": "让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 5,
+  "verification_paper": {
+    "paper_id": "NRPC-N3-02-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "解释 Backpressure 与资源上限 的核心机制和边界，覆盖：backpressure；watermark；bounded queue；overload isolation。重点说明因果关系，不背术语。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "给当前能力制造一个新的时序、并发或故障变化，在运行前预测关键状态和失败点。不得进入：复杂自适应限流算法；服务网格。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交真实工程结果。锚点：nebula/net/、nebula/rpc/、tests/backpressure/、benchmark/。必须附复现步骤和至少一种证据：过载测试、内存/P99 数据、代码、故障日志。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实运行中选择一个故障/边界，按观察→假设→证据→根因→修复→再验证完成诊断。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "把“让发送队列、inflight、跨线程队列与慢消费者都存在明确上限和过载策略，避免无界内存增长与尾延迟失控。”迁移到一个训练任务未原样出现的新场景，说明不变原则、需要调整的实现与取舍。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

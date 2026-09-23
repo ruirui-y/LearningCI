@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-N5-02",
+  "node_title": "与 bRPC / gRPC 的公平验证",
+  "source_plan_version": "0.4-simple-mainline",
+  "source_section": "§8.2",
+  "compiler": {
+    "type": "LearningCI 简化执行包生成器",
+    "status": "REVIEWED",
+    "note": "v0.4 默认执行包已可直接开始；只有节点确实过大或边界不清时才使用节点准备重新细化。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "main",
+      "title": "与 bRPC / gRPC 的公平验证 · 主任务",
+      "description": "保持节点完整，不再人为拆成二三十个碎片任务。",
+      "items": [
+        {
+          "id": "NRPC-N5-02-T01",
+          "title": "建立 NebulaRPC/bRPC/gRPC 统一 unary benchmark harness",
+          "detail": "建立 NebulaRPC/bRPC/gRPC 统一 unary benchmark harness",
+          "purpose": "用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。",
+          "estimated_minutes": 30,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N5-02-T02",
+          "title": "跑 payload × concurrency × connections 矩阵并保存原始数据",
+          "detail": "跑 payload × concurrency × connections 矩阵并保存原始数据",
+          "purpose": "用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。",
+          "estimated_minutes": 30,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N5-02-T03",
+          "title": "比较线程模型、连接模型、超时取消、backpressure 与可观测性设计",
+          "detail": "比较线程模型、连接模型、超时取消、backpressure 与可观测性设计",
+          "purpose": "用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。",
+          "estimated_minutes": 30,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N5-02-T04",
+          "title": "针对主要性能差距做一次源码/系统级归因并给出后续优化优先级",
+          "detail": "针对主要性能差距做一次源码/系统级归因并给出后续优化优先级",
+          "purpose": "用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。",
+          "estimated_minutes": 30,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        },
+        {
+          "id": "NRPC-N5-02-V01",
+          "title": "保存可复现命令、原始数据与结论",
+          "detail": "保存可复现命令、原始数据与结论",
+          "purpose": "用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "完成该动作本身",
+            "留下足以复核结果的最小证据"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 5,
+  "verification_paper": {
+    "paper_id": "NRPC-N5-02-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "解释 与 bRPC / gRPC 的公平验证 的核心机制和边界，覆盖：fair benchmark；framework tradeoff；gap attribution；benchmark methodology。重点说明因果关系，不背术语。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "给当前能力制造一个新的时序、并发或故障变化，在运行前预测关键状态和失败点。不得进入：为了赢跑分改变 workload；无证据宣称优于 bRPC/gRPC。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交真实工程结果。锚点：benchmark/framework/、docs/benchmark/framework_comparison.md。必须附复现步骤和至少一种证据：三框架版本与命令、原始 CSV/日志、对照报告、profile。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实运行中选择一个故障/边界，按观察→假设→证据→根因→修复→再验证完成诊断。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "把“用统一 workload 与环境和 bRPC/gRPC 做功能与性能对照，能解释差距来自哪里，而不是只给出谁快谁慢。”迁移到一个训练任务未原样出现的新场景，说明不变原则、需要调整的实现与取舍。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

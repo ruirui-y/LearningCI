@@ -1,0 +1,669 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S0-03",
+  "node_title": "历史断点与新起跑线确认",
+  "source_plan_version": "0.3-learningci-full",
+  "source_section": "§4.3 / §5.2 / §5.3 / §6",
+  "compiler": {
+    "type": "ChatGPT 手工导出导入细化",
+    "status": "REVIEWED",
+    "note": "由 LearningCI 导出细化包，经聊天式 AI 按 ZIP 内规则细化后人工导回；未使用任何模型 API，冻结路线、固定试卷与验收策略均未改动。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "g1",
+      "title": "1. 对照两个历史审计文档，写 NebulaRPC/docs/history/BREAKPOINT.md",
+      "description": "对照 MYMUDUO_AUDIT.md 与 GAME_RPC_AUDIT.md，产出 NebulaRPC/docs/history/BREAKPOINT.md 的四个小节与一张可交叉引用的能力边界图。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-G1-01",
+          "title": "确认 history 目录三文档的引用锚点",
+          "detail": "确认 NebulaRPC 目标仓库 docs/history/ 下 MYMUDUO_AUDIT.md、GAME_RPC_AUDIT.md、BREAKPOINT.md 三者的职责分工；列出 BREAKPOINT.md 四个小节分别要引用的 audit 小节名称，确保每条结论都能回指到可定位的 audit 位置。只读，不新建 docs/history/ 之外的产物。",
+          "purpose": "让边界图的每条结论都能追溯到既有 audit，而不是重新写一遍审计内容。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "写出三份文档的职责分工，明确 BREAKPOINT.md 只做断点结论、不重复审计正文",
+            "列出各节将引用的 audit 小节名称，不出现无法定位的“见上文”式引用"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G1-02",
+          "title": "提取 MyMuduo 已证明能力并绑定源码位置",
+          "detail": "按总计划 §4.1 的能力清单（EventLoop / Channel / EPollPoller / TcpConnection / TcpClient / Connector / Buffer / Timer 等）逐条核对，每条给出真实源码文件与函数入口；不允许用 README 的性能数字替代源码证据。",
+          "purpose": "把“MyMuduo 已证明的能力”从清单变成可复核的源码级事实。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少覆盖 EventLoop、TcpClient/Connector、TcpConnection、Buffer 四组能力，每组给出文件+函数入口",
+            "明确标注只能由 README/Notes 支撑、缺少源码位置的条目"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G1-03",
+          "title": "提取 game_rpc_project 已证明能力并绑定源码位置",
+          "detail": "按总计划 §4.2 清单（服务拆分、Protobuf RpcChannel、RpcHeader、增量 Frame 解析、RequestId/seq_id、PendingCall map、promise/future、ReceiverThread、Timeout、ConnectionPool）逐条给出旧 RPC 仓库的源码文件与函数入口。",
+          "purpose": "把旧 RPC 已证明的能力固化为可交叉引用的源码事实。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "每条能力都有源码文件+函数入口",
+            "明确标出哪些能力只存在于单条调用链上、没有独立测试覆盖"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G1-04",
+          "title": "建立能力交叉引用矩阵与历史演进图",
+          "detail": "把两份 audit 的条目按“是否同一技术问题”对齐成矩阵（技术问题 / MyMuduo 侧实现 / game_rpc 侧实现 / 结论），并据此画出 game_rpc_project 同步 RPC → MyMuduo TcpClient/EventLoop → 新断点的演进图。图中每个箭头必须标注对应源码依据。",
+          "purpose": "把两个仓库的能力拼成一张边界图，这是本节点能力定义的核心产物。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "矩阵中每条断点结论同时能指到两个仓库的具体文件或函数",
+            "演进图每个箭头都有源码依据，不出现无依据的箭头或未确认的阶段"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G1-05",
+          "title": "写 BREAKPOINT.md 第 1、2 节",
+          "detail": "依据矩阵结论填充第 1 节「保留」与第 2 节「废弃 / 只作为历史过渡方案」：保留项写清要继承的能力与不变量，废弃项写清与目标并发/所有权模型冲突的具体技术点。每条带 audit 引用或源码位置，不写重复归纳段落。",
+          "purpose": "让“保留什么、丢掉什么”在文档里逐条可复核，而不是一句总体评价。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "第 1、2 节每条结论都附 audit 引用或源码位置",
+            "第 2 节明确指出阻塞等待、共享 socket 写锁、线程模型分裂三类冲突"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G1-06",
+          "title": "写 BREAKPOINT.md 第 3 节「真正的新断点」",
+          "detail": "写出新断点 = Event-Driven TcpClient + RequestId/PendingCall 的组合，说明相对旧网络与旧 RPC 各自多出了什么，以及为什么它不是两者能力的简单相加。",
+          "purpose": "准确指出 NebulaRPC 的真实新断点，这是本节点能力定义的要求。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "表述与冻结节点能力定义一致",
+            "分别说明相对旧网络、旧 RPC 各多出什么",
+            "给出至少一条“不是简单相加”的论证"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G1-07",
+          "title": "写 BREAKPOINT.md 第 4 节「Zone 边界」",
+          "detail": "依据总计划 §5.2 / §5.3 / §6 写出 Stage 0~2 Recovery Zone 与 Stage 3 New Knowledge Zone 的边界，标明两侧各自要证明的能力与明确不做的事。",
+          "purpose": "把阶段地图的边界写成可判定的结论，供后续节点直接引用。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "与总计划 §5.2/§5.3/§6 一致",
+            "Recovery Zone 与 New Knowledge Zone 各自给出一条可判定的进入条件",
+            "明确本节点不承担 CallAsync 实现、协程实现与性能优化"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g2",
+      "title": "2. 明确保留、废弃、下一步连接三类结论",
+      "description": "把能力矩阵按保留 / 废弃 / 下一步连接三类收敛成可复核判据，避免结论停留在主观印象。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-G2-01",
+          "title": "为「保留」类建立判据并完成分类",
+          "detail": "先写出“保留”的判定条件：旧仓库已完整验证 + 新系统仍需同一不变量 + 不需要改变线程归属；再对矩阵条目逐条判定，把符合条件的归入保留并写明理由。",
+          "purpose": "让“保留”从印象变成可检查的判据。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "判据写成可逐条检查的条件",
+            "至少 3 项能力归入保留",
+            "每项保留结论都能指出旧仓库的实现位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G2-02",
+          "title": "为「废弃 / 降级」类建立判据并完成分类",
+          "detail": "判定条件围绕“与目标并发模型冲突”展开：阻塞业务线程、以共享 socket 的 write_mutex 作为核心同步手段、网络线程模型与 RPC Completion 分裂。逐条判定并给出继续沿用会在哪个 Stage 暴露问题。",
+          "purpose": "把历史实现中必须放弃的部分说清机制，而不是笼统写“旧代码不好”。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少 3 项归入废弃或降级",
+            "每项给出与目标模型冲突的具体机制",
+            "每项指出继续沿用会在哪个 Stage 暴露问题"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G2-03",
+          "title": "为「下一步连接」类建立判据并完成分类",
+          "detail": "判定条件 = 旧仓库已验证缺失 + 有明确承接 Stage。逐条写明由哪个 Stage 承接，以及为什么它属于 out_of_scope 而不能在本节点实现。",
+          "purpose": "让断点图直接连到后续节点，而不是停在“以后再说”。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少 3 项归入下一步连接",
+            "每项标注承接 Stage 编号",
+            "每项说明为什么不能在本节点实现"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G2-04",
+          "title": "三类结论互斥性与边界项取舍",
+          "detail": "对可能同时落入两类的条目（如 PendingCall map、ConnectionPool、Timer）做最终归属判定，输出一张无重复、无遗漏的三类分类表，并记录每个边界项的取舍理由。",
+          "purpose": "三类结论必须互斥且可核对，否则边界图无法作为后续节点依据。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "同一能力不出现在两类",
+            "边界项都给出取舍理由",
+            "分类表条目数与 g1 交叉引用矩阵条目数一致"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g3",
+      "title": "3. 写出 Stage 0~2 Recovery Zone 与 Stage 3 New Knowledge Zone 的边界",
+      "description": "明确 Stage 0~2 Recovery Zone 与 Stage 3 New Knowledge Zone 的边界，以及各自的进入条件与不做清单。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-G3-01",
+          "title": "逐条判定 Stage 0/1/2 的 Exit Criteria",
+          "detail": "取出总计划 §7.4 的 Stage 0 Exit Criteria、§8 的 Stage 1 必须保留能力、以及 Stage 2 的 Protocol/RequestId/PendingCall 恢复目标，逐条判定“旧仓库已证明 / 只能部分证明 / 必须在新仓库重做”，并给出判定依据。",
+          "purpose": "Recovery Zone 的范围必须由判定结果决定，而不是由感觉决定。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "Stage 0/1/2 每条 Exit Criteria 都有判定结论",
+            "结论附源码或 audit 依据",
+            "明确列出只能部分证明的条目"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G3-02",
+          "title": "找出 Recovery Zone 中不能直接复制的项",
+          "detail": "对照总计划 §5.1 的最小网络 Runtime 清单，标出哪些组件不能从 MyMuduo 直接提取而必须重写，说明原因（依赖旧线程模型、旧所有权假设、旧发送语义等）与最小重写范围。",
+          "purpose": "区分“可以快速重建”和“必须重写”，避免恢复区失控膨胀。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "给出“可直接提取 / 必须重写”两张清单",
+            "每项写明原因",
+            "重写范围不超出 §5.1 清单"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G3-03",
+          "title": "明确 Recovery Zone 的限时纪律与不做清单",
+          "detail": "依据总计划 §5.2 写出本区域明确不做的事：不整仓复制 MyMuduo、不重写整个网络库、不做无收益的完美重构、不重新证明 epoll/半包粘包/Protobuf；并给出判断“这个问题旧仓库是否已经解决”的可操作方法。",
+          "purpose": "让限时纪律可执行，防止恢复区变成第二次重写 muduo。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "不做清单与 §5.2 一致",
+            "给出至少一条可操作的“旧仓库已解决”判据",
+            "不引入本节点之外的实现工作"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G3-04",
+          "title": "给出 Stage 2 → Stage 3 的可判定边界判据",
+          "detail": "用可检查的条件描述“什么时候算已经在 Recovery Zone 把过去找回来了”，例如无阻塞线程的 RPC 基础可跑通、pending 注册与发送顺序已确定、帧解析不丢同步；并说明为什么 Stage 3 是真正的新起点。",
+          "purpose": "边界判据要能直接用于后续节点的准入判断。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "边界判据可逐条检查",
+            "判据中不含实现 CallAsync、协程或性能优化",
+            "明确指出 Stage 3 新增的内容无法由旧仓库经验直接推出"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g4",
+      "title": "4. ReceiverThread / wait_for 过渡模型源码级验证",
+      "description": "用旧 RPC 仓库的真实代码判定 ReceiverThread / wait_for 的过渡性，为 BREAKPOINT.md 第 2 节提供源码级证据。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-G4-01",
+          "title": "定位旧模型三个同步点",
+          "detail": "在 game_rpc_project 中定位 ReceiverTask 线程的创建与循环、MSG_WAITALL 的使用位置、std::future::wait_for 的调用点，给出文件与函数入口，并确认三者是否位于同一调用链上。",
+          "purpose": "过渡模型的判据必须先有源码位置，不能停在概念层。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "三个同步点各有确切文件+函数入口",
+            "说明三者的线程归属与线程数量",
+            "确认三者是否在同一条调用链上"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G4-02",
+          "title": "复原一次同步 RPC 的完整调用链",
+          "detail": "逐步复原 CallMethod → seq_id 分配 → pending_calls_ 注册 → send() → future.wait_for → ReceiverTask recv → 响应 seq_id 匹配 → promise.set_value 的真实链路，用 IDE 调用链或 git grep 定位每一步。",
+          "purpose": "把“请求响应匹配第一版”还原成可逐段引用的事实。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "链路每一步都有文件+函数入口",
+            "明确 pending 注册与 send 的先后顺序",
+            "指出超时或失败时该链在哪一步断开"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G4-03",
+          "title": "判定 wait_for 的阻塞语义",
+          "detail": "说明业务线程在 wait_for 期间处于什么状态、超时后 pending 条目与连接状态如何变化、发送失败与响应失败能否被区分，并给出旧代码中的错误传播路径。",
+          "purpose": "阻塞语义是判断“过渡模型”的第一手证据。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "说明阻塞期间业务线程的状态",
+            "说明超时后 pending 与连接的处理结果",
+            "明确“发送失败”和“响应失败”在旧模型里能否区分"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G4-04",
+          "title": "说明共享 socket 与写锁对无关请求的影响",
+          "detail": "结合旧实现说明同一 RPC 通道共享 socket、以 write_mutex 作为核心同步手段时，大包发送或慢消费如何拉长同通道其他请求的延迟，并指出写锁保护的临界区范围。",
+          "purpose": "解释历史演进动机：为什么当年必须把客户端 socket 移进 EventLoop。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "指出写锁保护的临界区范围",
+            "说明大包或慢消费如何影响同通道其他请求",
+            "给出至少一个可观察的延迟现象"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G4-05",
+          "title": "归纳过渡模型判据并预测删除后的不变量",
+          "detail": "归纳至少三条“ReceiverThread/wait_for 属于过渡模型”的判据（线程数随连接增长、Completion 在独立线程完成、失败语义分裂等），并预测删除该模型后连接关闭、超时、乱序响应三类场景中哪些不变量必须改为显式维护。只做判据与预测，不实现 CallAsync。",
+          "purpose": "为 Stage 3 的准入和风险清单提供前置依据。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "判据可逐条对照旧仓库源码验证",
+            "预测覆盖连接关闭、超时、乱序响应三类场景",
+            "明确不实现 CallAsync、不写协程、不做性能优化"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g5",
+      "title": "5. Stage 3 新起点充分性论证",
+      "description": "以旧模型的结构性障碍与不可约性论证 Stage 3 是真正的新起点。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-G5-01",
+          "title": "逐项落实 §10.1 要删除的旧模型",
+          "detail": "把总计划 §10.1 列出的五项（std::thread ReceiverTask、MSG_WAITALL、std::future::wait_for、业务线程阻塞等待 RPC、共享 socket 的 write_mutex 核心同步）逐项落到旧仓库实现位置，并写明删除后由什么机制替代。",
+          "purpose": "把“彻底摆脱旧模型”拆成可逐项核对的清单。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "五项各有实现位置",
+            "每项写出替代机制",
+            "不出现“保留原来的阻塞等待”这类结论"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G5-02",
+          "title": "对照 §10.8 Exit Criteria 说明旧模型的结构性障碍",
+          "detail": "逐条对照 §10.8 的七条 Exit Criteria（CallAsync 不阻塞调用线程、收包全部由 EventLoop 驱动、发送支持 partial write、Request/Response 多路复用正确、连接关闭能失败所有 PendingCall、不依赖 wait_for、不依赖 ReceiverThread），说明旧模型为什么做不到，以及为什么必须改结构而不是改参数。",
+          "purpose": "用验收条件反证旧模型的结构性障碍，而不是只做价值判断。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "七条各有“旧模型为什么做不到”的机制性说明",
+            "说明为什么必须改结构而非调参数",
+            "指出与 Stage 1/2 已恢复能力的分界"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G5-03",
+          "title": "论证新断点的不可约性",
+          "detail": "论证 Event-Driven TcpClient + RequestId/PendingCall 的组合为什么构成真正的新断点：单独拥有 TcpClient 仍是阻塞 RPC，单独拥有 PendingCall 仍被独立收包线程驱动，只有把 Completion 的注册与触发都放进同一个 EventLoop 才成立。",
+          "purpose": "证明新断点不是把两个旧项目的能力相加，这是本节点的核心判断。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "分别给出“只有 TcpClient”“只有 PendingCall”两个反例",
+            "说明两者合并的必要条件",
+            "结论与冻结节点能力定义一致"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-G5-04",
+          "title": "判定旧经验中仍然成立与必须推翻的部分",
+          "detail": "说明进入 Stage 3 后旧经验里必须保留的部分（帧边界与增量解析、RequestId 唯一性、pending 注册先于发送、部分写不变量）和必须推翻的部分，作为跨节点迁移判据。",
+          "purpose": "让后续节点直接知道哪些历史认知可以复用、哪些必须重写。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "分别列出仍然成立与必须推翻两张清单",
+            "每条给出理由",
+            "明确本节点不实现这些机制"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "must",
+      "title": "能力核对",
+      "description": "把“接触过”压缩成可闭卷解释的能力。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-M-01",
+          "title": "闭卷确认：旧网络模型与旧 RPC 模型之间的断点",
+          "detail": "不看总计划与 BREAKPOINT.md 草稿，用自己的话说明旧网络模型与旧 RPC 模型之间的断点：两侧各自已经解决了什么、剩余没解决的是什么、为什么剩余部分不能由任一侧单独解决，并落到真实项目位置。",
+          "purpose": "确认断点位置是真正理解，而不是抄总计划的结论。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能说出两侧各自已解决的核心问题",
+            "能指出剩余断点的准确位置",
+            "能给出至少一个“单侧无法解决”的理由"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-M-02",
+          "title": "闭卷确认：ReceiverThread/wait_for 为什么是过渡模型",
+          "detail": "不看笔记，用自己的话说明 ReceiverThread 与 wait_for 构成的模型为什么只是过渡方案：它解决了什么、在什么条件下失效、与目标并发模型冲突在哪里。",
+          "purpose": "确认解释的是机制而不是结论。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能说明线程模型分裂的机制",
+            "能指出与目标并发模型冲突的具体点",
+            "能给出至少一个该模型失效的场景"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-M-03",
+          "title": "闭卷确认：Stage 3 为什么是真正的新起点",
+          "detail": "不看笔记，用自己的话说明 Stage 0~2 为什么只是把过去找回来，而 Stage 3 新增了什么无法由旧仓库经验直接推出的内容。",
+          "purpose": "确认“新起点”这个判断能独立复述并解释。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "能说明 Stage 3 新增了什么",
+            "能解释为什么 Stage 0~2 属于恢复而不是新知识",
+            "能给出至少一个旧模型的结构性障碍"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "title": "验收准备",
+      "description": "只检查当前节点证据是否齐全，不扩路线。",
+      "assessment_required": true,
+      "items": [
+        {
+          "id": "NRPC-S0-03-GATE-01",
+          "title": "核对工程产物完整性",
+          "detail": "确认 NebulaRPC/docs/history/BREAKPOINT.md 已存在，且四个小节都能被第三方按引用复核。",
+          "purpose": "确认项目锚点产物真实存在且可复核。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "项目锚点产物存在且四节齐全",
+            "关键结论都能追溯到 audit 引用或源码位置"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-GATE-02",
+          "title": "核对 Out of Scope",
+          "detail": "确认本节点没有为了完成断点图而进入：实现 CallAsync、实现协程、性能优化。",
+          "purpose": "防止用相邻节点的成果冒充当前节点完成度。",
+          "estimated_minutes": 5,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "没有提交相邻节点成果冒充当前节点完成度"
+          ]
+        },
+        {
+          "id": "NRPC-S0-03-GATE-03",
+          "title": "对照固定试卷自检",
+          "detail": "提前查看固定 Verification 题目，仅检查证据是否齐备，不向 AI 索要答案。",
+          "purpose": "确认五个评分维度都有可用证据。",
+          "estimated_minutes": 8,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "五个评分维度都有可用证据",
+            "implementation 与 diagnosis 的工程证据可复核"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 30,
+  "verification_paper": {
+    "paper_id": "NRPC-S0-03-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "不查看总计划，用自己的话解释“历史断点与新起跑线确认”的核心机制、它解决的问题以及边界。必须覆盖本节点 Must Learn：旧网络模型与旧 RPC 模型之间的断点；ReceiverThread/wait_for 为什么是过渡模型；Stage 3 为什么是真正的新起点。不能只背定义；需要结合 NebulaRPC 当前实现或设计说明因果关系。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "围绕“历史断点与新起跑线确认”构造一个当前节点范围内的陌生变化场景：改变一个关键输入、时序、并发条件或故障条件。在实际运行前，先预测系统行为、关键状态变化和最可能失败的位置，并写出预测依据。不得进入本节点明确不考的范围：实现 CallAsync；实现协程；性能优化。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交本节点规定的真实工程产物并证明它达到冻结计划的最低验收标准。项目锚点：docs/history/BREAKPOINT.md。必须附可验证证据（至少一种：两份 audit 的交叉引用、明确的历史演进图），同时给出复现命令/步骤和实际结果；只描述“已经完成”不得分。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实实现、测试或实验中选择一个失败/异常/边界问题进行诊断。必须按“观察 → 假设 → 证据采集 → 根因 → 修复或结论 → 再验证”完成，并附真实可验证证据（两份 audit 的交叉引用、明确的历史演进图）。问题必须严格属于“历史断点与新起跑线确认”范围。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "给出一个没有在训练任务中原样出现、但仍属于当前能力边界的新场景，说明如何把“能够把旧网络库和旧 RPC 的能力拼成一张边界图，并准确指出 NebulaRPC 的真实新断点是 Event-Driven TcpClient + PendingCall 的 Async RPC。”迁移过去。必须说明哪些原则保持不变、哪些参数或实现需要调整、有什么取舍；禁止借此提前进入：实现 CallAsync；实现协程；性能优化。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

@@ -1,0 +1,526 @@
+{
+  "schema_version": 1,
+  "node_id": "NRPC-S1-01",
+  "node_title": "EventLoop 可读事件完整路径",
+  "source_plan_version": "0.3-learningci-full",
+  "source_section": "§8.1~§8.6",
+  "compiler": {
+    "type": "ChatGPT 手工导出导入细化",
+    "status": "REVIEWED",
+    "note": "由 LearningCI 导出细化包，经聊天式 AI 生成后人工导回；未使用任何模型 API。"
+  },
+  "task_policy": {
+    "single_active_leaf_task": true,
+    "leaf_tasks_required_for_verification": true,
+    "parent_progress_is_derived": true,
+    "paper_visible_before_tasks_complete": true
+  },
+  "task_groups": [
+    {
+      "id": "g1",
+      "title": "1. 恢复最小 EventLoop/Channel/TcpConnection read path",
+      "description": "恢复并验证最小单 EventLoop 可读事件路径，逐层确认 nonblocking socket、epoll readiness、Channel callback 与 TcpConnection owner EventLoop 的真实关系。",
+      "items": [
+        {
+          "id": "NRPC-S1-01-G1-01",
+          "title": "定位 EventLoop 可读路径入口",
+          "detail": "在 nebula/net/event_loop.* 中定位事件循环入口、等待活动事件的位置和活动事件分发循环；只确认单 EventLoop 的读路径，不进入 Multi-Reactor。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "给出 EventLoop 循环入口的真实源码路径与函数名",
+            "指出等待就绪事件和遍历活动事件的位置",
+            "说明本任务只覆盖单 EventLoop 的可读事件分发"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G1-02",
+          "title": "实现并验证 nonblocking socket 读边界",
+          "detail": "围绕当前 TcpConnection 的 socket 读路径确认 socket 为 nonblocking，并说明 readiness 触发后实际 read/recv 仍可能出现短读、当前数据读尽或暂时无更多数据等边界。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "在允许的项目锚点中给出 nonblocking/read path 的真实落点",
+            "说明 nonblocking 的目的不是让 I/O 更快，而是避免 owner EventLoop 被单个 fd 长时间阻塞",
+            "给出至少一个实际读取边界及对应处理证据"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G1-03",
+          "title": "追踪 epoll readiness 到 EventLoop 活动事件",
+          "detail": "从 epoll_wait/等价等待调用返回开始，追踪可读 readiness 如何进入 EventLoop 的活动事件集合并被逐个分发。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "指出 epoll readiness 被 EventLoop 接收的位置",
+            "说明 readiness 表示当前可尝试 I/O，而不是完整业务消息已经到齐",
+            "写出 readiness 到活动事件分发的实际调用顺序"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G1-04",
+          "title": "追踪 Channel 可读事件分发",
+          "detail": "在 nebula/net/channel.* 中定位事件兴趣、返回事件与 callback 的桥接关系，确认可读事件如何选择 read callback。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "定位 Channel 的事件分发入口",
+            "定位 read callback 的保存/绑定位置",
+            "说明本次可读 readiness 如何触发 read callback"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G1-05",
+          "title": "确认 TcpConnection 与 owner EventLoop/Channel 的绑定",
+          "detail": "在 nebula/net/tcp_connection.* 中确认 TcpConnection 如何关联 owner EventLoop 和 Channel，并找到 TcpConnection 读处理函数被绑定为 Channel read callback 的位置。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "定位 TcpConnection 与 EventLoop/Channel 的真实关联位置",
+            "定位 read callback 绑定到 TcpConnection 读处理函数的位置",
+            "说明当前节点中该连接的读事件由 owner EventLoop 路径处理"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G1-06",
+          "title": "打通 TcpConnection read 到 message callback",
+          "detail": "完成或恢复 TcpConnection 的最小读取路径：可读 callback 进入连接读处理，读取 socket 数据后调用上层 message callback；不得扩展到 RPC、Coroutine 或 Multi-Reactor。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "给出 Channel read callback → TcpConnection read handler → message callback 的完整函数链",
+            "真实输入数据能够到达 message callback",
+            "代码改动仅位于允许的项目锚点范围"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g2",
+      "title": "2. 完成 localhost echo 可读路径",
+      "description": "使用 localhost echo 场景验证最小可读链路真实运行，不新增与当前节点无关的框架能力。",
+      "items": [
+        {
+          "id": "NRPC-S1-01-G2-01",
+          "title": "建立 localhost echo 可复现场景",
+          "detail": "使用当前工程已有运行入口或外部客户端命令建立 localhost 连接，发送已知字节，使数据经过 EventLoop/Channel/TcpConnection 到达 message callback。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录可重复执行的启动与发送步骤",
+            "localhost 连接建立成功",
+            "发送已知字节后 message callback 收到对应内容"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G2-02",
+          "title": "验证一次完整可读事件顺序",
+          "detail": "在 echo 场景中发送一段短消息，记录一次从 EventLoop 活动事件分发到 Channel read callback、TcpConnection 读取、message callback 的完整顺序。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "保存一次可复核的运行证据",
+            "证据顺序能够对应 EventLoop → Channel → TcpConnection → message callback",
+            "实际收到内容与发送内容一致"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G2-03",
+          "title": "验证同一连接的多次可读事件",
+          "detail": "在同一 localhost 连接上分时发送至少两段不同内容，确认每次新数据到达都由同一 TcpConnection 的 owner EventLoop 驱动并到达 message callback。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "至少两次发送均触发 message callback",
+            "两次消息内容可区分且未串错",
+            "能够指出同一 TcpConnection 与 owner EventLoop 的对应关系"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G2-04",
+          "title": "验证读取完成后 EventLoop 不阻塞等待未来数据",
+          "detail": "观察一次可读数据处理完成后 socket 暂时没有更多数据时的行为，确认当前 read path 返回事件循环而不是继续阻塞等待后续数据。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "提供日志、strace 或运行现象作为证据",
+            "说明读取完成后控制流如何回到 EventLoop",
+            "没有把结论扩展到 EPOLLOUT/partial write"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G2-05",
+          "title": "验证 message callback 的触发条件",
+          "detail": "对比有数据到达与没有新数据的时间窗口，确认 message callback 是由实际可读数据路径触发，而不是 EventLoop 每轮循环无条件调用。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "有新数据时 message callback 被触发",
+            "没有新数据时不存在无条件 message callback 调用",
+            "能够解释 callback 与 readiness/read path 的因果关系"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "g3",
+      "title": "3. 用日志或 strace 验证一次事件完整调用链",
+      "description": "用应用日志与 strace 对同一次 localhost echo 进行双层验证，并完成一次当前 read path 范围内的故障定位与恢复。",
+      "items": [
+        {
+          "id": "NRPC-S1-01-G3-01",
+          "title": "设置最小可观测日志点",
+          "detail": "只在 nebula/net/event_loop.*、nebula/net/channel.*、nebula/net/tcp_connection.* 中设置最少必要日志点，覆盖活动事件分发、Channel 可读 callback、TcpConnection 读取与 message callback 前后。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 15,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "日志点覆盖 EventLoop、Channel、TcpConnection 三层",
+            "每个日志点都能对应真实函数入口",
+            "没有为了日志扩展到 RPC、Coroutine 或 Multi-Reactor"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G3-02",
+          "title": "用日志验证应用层完整调用链",
+          "detail": "运行一次 localhost echo，保存从活动事件进入 EventLoop 分发开始，到 Channel callback、TcpConnection read、message callback 的有序日志。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "保存一次完整有序日志",
+            "四个关键阶段顺序可辨认",
+            "日志与源码调用链一致"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G3-03",
+          "title": "用 strace 验证 epoll 与 read/recv",
+          "detail": "对同一次 echo 运行执行 strace，只关注 epoll_wait/epoll_pwait 与 read/recv 等本节点相关系统调用，证明内核 readiness 与实际读取确实发生。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 20,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "strace 中观察到 epoll_wait/epoll_pwait 返回事件",
+            "同一次测试中观察到后续 read/recv 类系统调用",
+            "能够将系统调用与 EventLoop/TcpConnection 的真实代码位置对应"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G3-04",
+          "title": "交叉核对日志与 strace 因果顺序",
+          "detail": "对照同一次 echo 测试的应用日志和 strace，确认 readiness 先发生，随后进入 Channel/TcpConnection 读处理，最终到达 message callback。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 18,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "日志与 strace 来自同一次可复现实验",
+            "能指出 epoll 返回与实际读取之间的对应关系",
+            "能指出 message callback 位于成功读取之后"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-G3-05",
+          "title": "诊断一次可读链路中断",
+          "detail": "在当前 read path 内制造一个可逆错误，例如取消可读兴趣或断开 read callback 绑定；修改前先预测现象，再用日志/strace 找到中断层级，恢复后复跑同一 echo 场景。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 25,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "记录错误修改前的预测",
+            "用日志或 strace 证明调用链在哪一层中断",
+            "指出根因与实际现象之间的因果关系",
+            "恢复后同一 echo 场景再次通过"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "must",
+      "title": "能力核对",
+      "description": "把“接触过”压缩成可闭卷解释的能力。",
+      "items": [
+        {
+          "id": "NRPC-S1-01-M-01",
+          "title": "闭卷确认：nonblocking socket",
+          "detail": "不看源码，用自己的话解释 nonblocking socket 在 EventLoop 可读路径中的作用、与 readiness 的关系以及至少一个读取边界，并指出当前项目真实落点。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "说明 nonblocking 的核心目的是避免 owner EventLoop 被单个 fd 长时间阻塞",
+            "说明 readiness 与实际 read/recv 尝试之间的关系",
+            "指出当前项目真实落点和至少一个失败/边界场景"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-M-02",
+          "title": "闭卷确认：epoll readiness",
+          "detail": "不看源码，用自己的话解释 epoll readiness 表示什么、不表示什么，以及为什么收到 readiness 后仍然必须进入 Channel/TcpConnection 实际读取。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "说明 readiness 是当前可尝试 I/O 的状态通知",
+            "明确 readiness 不等于完整业务消息已到齐",
+            "能够从 epoll_wait 口头串到 Channel 分发"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-M-03",
+          "title": "闭卷确认：Channel callback",
+          "detail": "不看源码，用自己的话解释 Channel 为什么存在、怎样把 fd 的就绪事件转换成 callback，以及 read callback 如何继续进入 TcpConnection。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "说明 Channel 承担 fd/事件与 callback 的桥接职责",
+            "说明可读事件如何选择 read callback",
+            "能够继续复述到 TcpConnection 读处理函数"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-M-04",
+          "title": "闭卷确认：TcpConnection owner EventLoop",
+          "detail": "不看源码，用自己的话解释 TcpConnection 为什么需要明确 owner EventLoop，以及这种归属对当前单 EventLoop 可读路径的意义；不展开 Multi-Reactor。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 12,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "说明 TcpConnection 与 owner EventLoop 的关系",
+            "说明 socket 可读事件、Channel callback、TcpConnection 处理属于同一 owner 路径",
+            "明确本节点不讨论 Multi-Reactor 跨线程所有权"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "title": "验收准备",
+      "description": "只检查当前节点证据是否齐全，不扩路线。",
+      "items": [
+        {
+          "id": "NRPC-S1-01-GATE-01",
+          "title": "核对工程产物完整性",
+          "detail": "确认 nebula/net/event_loop.*、nebula/net/channel.*、nebula/net/tcp_connection.* 中本节点涉及的最小 read path 已存在，并且 echo test、日志或 strace 证据能够回到具体函数。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 10,
+          "required": true,
+          "evidence_required": true,
+          "evidence_fields": [
+            "source_path",
+            "function_name",
+            "note"
+          ],
+          "done_when": [
+            "三个 project_anchor 路径中的关键实现均可定位",
+            "至少一份 echo test 证据存在",
+            "至少一份日志或 strace 证据存在"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-GATE-02",
+          "title": "核对 Out of Scope",
+          "detail": "确认本节点没有为了完成任务而进入 Multi-Reactor、RPC、Coroutine，也没有把相邻节点成果冒充当前节点完成度。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 5,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "没有提交 Multi-Reactor 相关实现",
+            "没有提交 RPC 相关实现",
+            "没有提交 Coroutine 相关实现"
+          ]
+        },
+        {
+          "id": "NRPC-S1-01-GATE-03",
+          "title": "对照固定试卷自检",
+          "detail": "只检查现有任务记录是否已经覆盖固定试卷所需的 explanation、prediction、implementation、diagnosis、transfer 证据，不重新出题、不修改固定试卷。",
+          "purpose": "能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。",
+          "estimated_minutes": 8,
+          "required": true,
+          "evidence_required": false,
+          "evidence_fields": [
+            "note"
+          ],
+          "done_when": [
+            "explanation/prediction 有当前机制依据",
+            "implementation 有 echo test 或日志/strace 工程证据",
+            "diagnosis 有一次当前 read path 内的真实断点与恢复证据",
+            "transfer 能在不进入 Multi-Reactor/RPC/Coroutine 的前提下解释同类变化"
+          ]
+        }
+      ]
+    }
+  ],
+  "task_count": 23,
+  "verification_paper": {
+    "paper_id": "NRPC-S1-01-V1",
+    "version": 1,
+    "visible_from_start": true,
+    "frozen": true,
+    "questions": [
+      {
+        "id": "q1",
+        "dimension": "explanation",
+        "max_score": 15,
+        "question": "不查看总计划，用自己的话解释“EventLoop 可读事件完整路径”的核心机制、它解决的问题以及边界。必须覆盖本节点 Must Learn：nonblocking socket；epoll readiness；Channel callback；TcpConnection owner EventLoop。不能只背定义；需要结合 NebulaRPC 当前实现或设计说明因果关系。"
+      },
+      {
+        "id": "q2",
+        "dimension": "prediction",
+        "max_score": 15,
+        "question": "围绕“EventLoop 可读事件完整路径”构造一个当前节点范围内的陌生变化场景：改变一个关键输入、时序、并发条件或故障条件。在实际运行前，先预测系统行为、关键状态变化和最可能失败的位置，并写出预测依据。不得进入本节点明确不考的范围：Multi-Reactor；RPC；Coroutine。"
+      },
+      {
+        "id": "q3",
+        "dimension": "implementation",
+        "max_score": 25,
+        "question": "提交本节点规定的真实工程产物并证明它达到冻结计划的最低验收标准。项目锚点：nebula/net/event_loop.*、nebula/net/channel.*、nebula/net/tcp_connection.*。必须附可验证证据（至少一种：echo test、日志/strace），同时给出复现命令/步骤和实际结果；只描述“已经完成”不得分。"
+      },
+      {
+        "id": "q4",
+        "dimension": "diagnosis",
+        "max_score": 25,
+        "question": "从本节点真实实现、测试或实验中选择一个失败/异常/边界问题进行诊断。必须按“观察 → 假设 → 证据采集 → 根因 → 修复或结论 → 再验证”完成，并附真实可验证证据（echo test、日志/strace）。问题必须严格属于“EventLoop 可读事件完整路径”范围。"
+      },
+      {
+        "id": "q5",
+        "dimension": "transfer",
+        "max_score": 20,
+        "question": "给出一个没有在训练任务中原样出现、但仍属于当前能力边界的新场景，说明如何把“能够从 epoll_wait 开始解释并验证 TCP 可读事件如何经过 Channel/TcpConnection 到达 message callback。”迁移过去。必须说明哪些原则保持不变、哪些参数或实现需要调整、有什么取舍；禁止借此提前进入：Multi-Reactor；RPC；Coroutine。"
+      }
+    ]
+  },
+  "retest_policy": {
+    "reuse_initial_verification_for_failed_attempts": true,
+    "new_paper_required_for_retest": true,
+    "retest_paper_must_change_scenario": true
+  }
+}

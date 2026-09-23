@@ -1,482 +1,118 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-16",
+  "route_version": "0.4-simple-mainline",
   "nodes": [
     {
-      "node_id": "NRPC-S0-01",
-      "title": "MyMuduo 历史能力审计",
-      "task_count": 41,
+      "node_id": "NRPC-R0-01",
+      "title": "快速回顾 MyMuduo 网络运行时",
+      "execution_mode": "REVIEW",
+      "task_count": 5,
       "compiler_status": "REVIEWED",
-      "paper_id": "NRPC-S0-01-V1"
+      "paper_id": "NRPC-R0-01-V1"
     },
     {
-      "node_id": "NRPC-S0-02",
-      "title": "game_rpc_project 历史能力审计",
-      "task_count": 17,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S0-02-V1"
-    },
-    {
-      "node_id": "NRPC-S0-03",
-      "title": "历史断点与新起跑线确认",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S0-03-V1"
-    },
-    {
-      "node_id": "NRPC-S0-04",
-      "title": "可重复 Build / Test 基线",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S0-04-V1"
-    },
-    {
-      "node_id": "NRPC-S0-05",
-      "title": "Benchmark 环境记录基线",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S0-05-V1"
-    },
-    {
-      "node_id": "NRPC-S1-01",
-      "title": "EventLoop 可读事件完整路径",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S1-01-V1"
-    },
-    {
-      "node_id": "NRPC-S1-02",
-      "title": "Partial Write 与 EPOLLOUT 生命周期",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S1-02-V1"
-    },
-    {
-      "node_id": "NRPC-S1-03",
-      "title": "Connection Close 生命周期",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S1-03-V1"
-    },
-    {
-      "node_id": "NRPC-S1-04",
-      "title": "Connector/TcpClient 事件驱动恢复",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S1-04-V1"
-    },
-    {
-      "node_id": "NRPC-S1-05",
-      "title": "最小网络 Runtime Stage 1 验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S1-05-V1"
-    },
-    {
-      "node_id": "NRPC-S2-01",
-      "title": "Frame V2 协议边界与硬限制",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S2-01-V1"
-    },
-    {
-      "node_id": "NRPC-S2-02",
-      "title": "Incremental Frame Parser",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S2-02-V1"
-    },
-    {
-      "node_id": "NRPC-S2-03",
-      "title": "RequestId 与 PendingCall V1",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S2-03-V1"
-    },
-    {
-      "node_id": "NRPC-S2-04",
-      "title": "1000 Inflight 乱序响应验证",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S2-04-V1"
-    },
-    {
-      "node_id": "NRPC-S2-05",
-      "title": "Protobuf Adapter 与 Runtime 解耦",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S2-05-V1"
-    },
-    {
-      "node_id": "NRPC-S2-06",
-      "title": "Stage 2 恢复区验收",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S2-06-V1"
-    },
-    {
-      "node_id": "NRPC-S3-01",
-      "title": "CallAsync 线程语义与所有权设计",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S3-01-V1"
-    },
-    {
-      "node_id": "NRPC-S3-02",
-      "title": "Event-Driven CallAsync 最小实现",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S3-02-V1"
-    },
-    {
-      "node_id": "NRPC-S3-03",
-      "title": "Connection Close 失败所有 PendingCall",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S3-03-V1"
-    },
-    {
-      "node_id": "NRPC-S3-04",
-      "title": "删除 ReceiverThread / wait_for 主执行模型",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S3-04-V1"
-    },
-    {
-      "node_id": "NRPC-S3-05",
-      "title": "Async RPC 高 Inflight 与旧模型对照",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S3-05-V1"
-    },
-    {
-      "node_id": "NRPC-S4-01",
-      "title": "最小 Task<T>/Task<void> 协程对象",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S4-01-V1"
-    },
-    {
-      "node_id": "NRPC-S4-02",
-      "title": "RpcAwaiter suspend/resume 链路",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S4-02-V1"
-    },
-    {
-      "node_id": "NRPC-S4-03",
-      "title": "Coroutine Frame 生命周期与提前销毁",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S4-03-V1"
-    },
-    {
-      "node_id": "NRPC-S4-04",
-      "title": "Coroutine Resume 线程语义",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S4-04-V1"
-    },
-    {
-      "node_id": "NRPC-S4-05",
-      "title": "1000 并发 Coroutine RPC 验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S4-05-V1"
-    },
-    {
-      "node_id": "NRPC-S5-01",
-      "title": "Completion Sources 与终态状态机",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S5-01-V1"
-    },
-    {
-      "node_id": "NRPC-S5-02",
-      "title": "Timer + Absolute Deadline",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S5-02-V1"
-    },
-    {
-      "node_id": "NRPC-S5-03",
-      "title": "Cancel / Late Response 语义",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S5-03-V1"
-    },
-    {
-      "node_id": "NRPC-S5-04",
-      "title": "Completion Race Suite",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S5-04-V1"
-    },
-    {
-      "node_id": "NRPC-S5-05",
-      "title": "Shutdown 下挂起调用收尾",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S5-05-V1"
-    },
-    {
-      "node_id": "NRPC-S6-01",
-      "title": "Multi-Reactor RPC 所有权模型",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S6-01-V1"
-    },
-    {
-      "node_id": "NRPC-S6-02",
-      "title": "跨线程 Command Queue + eventfd",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S6-02-V1"
-    },
-    {
-      "node_id": "NRPC-S6-03",
-      "title": "1/2/4/8 Reactor 扩展实验",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S6-03-V1"
-    },
-    {
-      "node_id": "NRPC-S6-04",
-      "title": "CPU Affinity 可选实验与 Stage 6 验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S6-04-V1"
-    },
-    {
-      "node_id": "NRPC-S7-01",
-      "title": "Output Watermark 与 Slow Consumer 边界",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S7-01-V1"
-    },
-    {
-      "node_id": "NRPC-S7-02",
-      "title": "Inflight / Pending 上限与 Fail-Fast",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S7-02-V1"
-    },
-    {
-      "node_id": "NRPC-S7-03",
-      "title": "跨线程队列与 Timer 等资源边界",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S7-03-V1"
-    },
-    {
-      "node_id": "NRPC-S7-04",
-      "title": "Overload 隔离验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S7-04-V1"
-    },
-    {
-      "node_id": "NRPC-S8-01",
-      "title": "异步 Connection Pool",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S8-01-V1"
-    },
-    {
-      "node_id": "NRPC-S8-02",
-      "title": "Load Balancing 对照实验",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S8-02-V1"
-    },
-    {
-      "node_id": "NRPC-S8-03",
-      "title": "Retry 幂等 / Deadline 语义",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S8-03-V1"
-    },
-    {
-      "node_id": "NRPC-S8-04",
-      "title": "Static Resolver 与 Client Runtime 验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S8-04-V1"
-    },
-    {
-      "node_id": "NRPC-S9-01",
-      "title": "核心 Metrics：Counter/Gauge/Histogram",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S9-01-V1"
-    },
-    {
-      "node_id": "NRPC-S9-02",
-      "title": "EventLoop Lag",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S9-02-V1"
-    },
-    {
-      "node_id": "NRPC-S9-03",
-      "title": "RequestId Debug Trace",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S9-03-V1"
-    },
-    {
-      "node_id": "NRPC-S9-04",
-      "title": "仅靠指标定位一次 P99 异常",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S9-04-V1"
-    },
-    {
-      "node_id": "NRPC-S10-01",
-      "title": "Fault Matrix：连接与协议异常",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S10-01-V1"
-    },
-    {
-      "node_id": "NRPC-S10-02",
-      "title": "Connection Close 完整资源清理",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S10-02-V1"
-    },
-    {
-      "node_id": "NRPC-S10-03",
-      "title": "Graceful Shutdown 状态机",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S10-03-V1"
-    },
-    {
-      "node_id": "NRPC-S10-04",
-      "title": "自动化 Fault + Shutdown 验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S10-04-V1"
-    },
-    {
-      "node_id": "NRPC-S11-01",
-      "title": "性能 Baseline + Profile 闭环",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S11-01-V1"
-    },
-    {
-      "node_id": "NRPC-S11-02",
-      "title": "第一个真实性能优化案例",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S11-02-V1"
-    },
-    {
-      "node_id": "NRPC-S11-03",
-      "title": "第二个独立性能优化案例",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S11-03-V1"
-    },
-    {
-      "node_id": "NRPC-S11-04",
-      "title": "失败优化案例与回退",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S11-04-V1"
-    },
-    {
-      "node_id": "NRPC-S12-01",
-      "title": "统一 Framework Benchmark Harness",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S12-01-V1"
-    },
-    {
-      "node_id": "NRPC-S12-02",
-      "title": "Payload/Concurrency/Connections Matrix",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S12-02-V1"
-    },
-    {
-      "node_id": "NRPC-S12-03",
-      "title": "框架差距定位与解释",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S12-03-V1"
-    },
-    {
-      "node_id": "NRPC-S12-04",
-      "title": "Framework Benchmark Stage 验收",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S12-04-V1"
-    },
-    {
-      "node_id": "NRPC-S13-01",
-      "title": "io_uring Transport Prototype",
-      "task_count": 14,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S13-01-V1"
-    },
-    {
-      "node_id": "NRPC-S13-02",
-      "title": "Timing Wheel 对照实验",
-      "task_count": 14,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S13-02-V1"
-    },
-    {
-      "node_id": "NRPC-S13-03",
-      "title": "Per-Core / NUMA 研究",
-      "task_count": 14,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S13-03-V1"
-    },
-    {
-      "node_id": "NRPC-S13-04",
-      "title": "Adaptive Concurrency / TLS / Compression 选题",
-      "task_count": 14,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S13-04-V1"
-    },
-    {
-      "node_id": "NRPC-S14-01",
-      "title": "Typed API / Protobuf Service Model 收束",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S14-01-V1"
-    },
-    {
-      "node_id": "NRPC-S14-02",
-      "title": "protoc Codegen 可选实验",
-      "task_count": 13,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S14-02-V1"
-    },
-    {
-      "node_id": "NRPC-S15-01",
-      "title": "v1.0 正确性与系统设计证据收束",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S15-01-V1"
-    },
-    {
-      "node_id": "NRPC-S15-02",
-      "title": "README / Architecture / Benchmark 作品化",
-      "task_count": 15,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S15-02-V1"
-    },
-    {
-      "node_id": "NRPC-S15-03",
-      "title": "v1.0 封版与技术叙事验收",
-      "task_count": 16,
-      "compiler_status": "GENERATED",
-      "paper_id": "NRPC-S15-03-V1"
+      "node_id": "NRPC-R0-02",
+      "title": "快速回顾 game_rpc_project RPC 链路",
+      "execution_mode": "REVIEW",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-R0-02-V1"
+    },
+    {
+      "node_id": "NRPC-B0-01",
+      "title": "建立 NebulaRPC 可工作的 Baseline",
+      "execution_mode": "MIGRATE",
+      "task_count": 6,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-B0-01-V1"
+    },
+    {
+      "node_id": "NRPC-N1-01",
+      "title": "Event-Driven Async RPC",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N1-01-V1"
+    },
+    {
+      "node_id": "NRPC-N1-02",
+      "title": "Deadline / Cancel / Exactly-Once Completion",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N1-02-V1"
+    },
+    {
+      "node_id": "NRPC-N2-01",
+      "title": "C++20 Coroutine RPC API",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N2-01-V1"
+    },
+    {
+      "node_id": "NRPC-N2-02",
+      "title": "Coroutine 生命周期与 Resume 线程语义",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N2-02-V1"
+    },
+    {
+      "node_id": "NRPC-N3-01",
+      "title": "Multi-Reactor 与跨线程所有权",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N3-01-V1"
+    },
+    {
+      "node_id": "NRPC-N3-02",
+      "title": "Backpressure 与资源上限",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N3-02-V1"
+    },
+    {
+      "node_id": "NRPC-N4-01",
+      "title": "Client Runtime：连接池、负载均衡与重试",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N4-01-V1"
+    },
+    {
+      "node_id": "NRPC-N4-02",
+      "title": "Observability / Fault / Graceful Shutdown",
+      "execution_mode": "BUILD",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N4-02-V1"
+    },
+    {
+      "node_id": "NRPC-N5-01",
+      "title": "Benchmark / Profile / 性能优化闭环",
+      "execution_mode": "VALIDATE",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N5-01-V1"
+    },
+    {
+      "node_id": "NRPC-N5-02",
+      "title": "与 bRPC / gRPC 的公平验证",
+      "execution_mode": "VALIDATE",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-N5-02-V1"
+    },
+    {
+      "node_id": "NRPC-FINAL-01",
+      "title": "NebulaRPC v1.0 求职证据收束",
+      "execution_mode": "VALIDATE",
+      "task_count": 5,
+      "compiler_status": "REVIEWED",
+      "paper_id": "NRPC-FINAL-01-V1"
     }
   ]
 }
