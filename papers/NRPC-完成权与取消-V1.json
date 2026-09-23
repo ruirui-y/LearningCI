@@ -1,0 +1,92 @@
+{
+  "paper_code": "NRPC-CORE-V1",
+  "title": "NebulaRPC 完成权与取消 · 闭卷验收",
+  "description": "范围：rpc_call（CAS 完成权仲裁）、rpc_controller（取消与 token 注册表）、rpc_channel（四条完成路径与 TakePendingCall 收口）这三处的现有代码。不考协程、背压、Client Runtime。全部题目只要求写机制与因果，不要求粘贴源码路径。",
+  "time_limit_minutes": 45,
+  "questions": [
+    {
+      "id": "q1",
+      "title": "CAS 的三个状态角色与无锁的原因",
+      "dimension": "explanation",
+      "max_score": 15,
+      "tags": [
+        "rpc_call",
+        "CAS",
+        "内存序"
+      ],
+      "question": "读 nebula/rpc/rpc_call.cpp 的 TryComplete。\n\n① 这个方法里出现了三个\"状态\"角色（成员 state_、局部变量 expected、形参 state）。分别写出它们各自的含义，以及 CAS 返回 false 时到底发生了什么——包括那个必须按引用传入的参数为什么必须是引用。\n\n② 8 个线程同时调用同一个 RpcCall 的 TryComplete，为什么不会出现两个赢家，而全程没有任何 mutex？请从存放 state_ 的那条 cache line 的归属变化来讲。\n\n③ 代码传的是 std::memory_order_acq_rel。它和 ② 里保证互斥的那个机制，各自负责什么？只答其中一个能替代另一个吗？",
+      "standard_answer": "① 三个角色：\n- state_：std::atomic<RpcCallState>，共享内存里的**真实当前状态**，初值 Pending。\n- expected：函数内的局部变量，恒初始化为 Pending。它是\"我以为 state_ 现在是 Pending\"这个**假设值**。\n- state（形参）：desired，CAS 成功后要写进去的**目标终态**（Completed / Timeout / Cancelled / Failed）。\n\nCAS 失败时：读 state_、与 expected 比较、条件写入这三件事被焊死在一条 lock cmpxchg 里，不相等则**一个字节都不写**，同时把 state_ 的真实值**回写进 expected**，返回 false。回写这个动作要求 expected 必须是 T& —— 它得能把真相告诉你\"你猜错了，实际是 Completed\"。在 TryComplete 里这个回写值被丢掉了（expected 是局部变量），所以引用参数在这里纯粹是 CAS 接口的必须形态。\n\n② 这条 cache line 在多核下的归属：初始 Core0 持有 E/M，Core1..7 都是 I（副本失效）。T0 执行 lock cmpxchg 时先独占该 line，把其它核的副本全部置 I，读到 Pending 等于 expected，写入 Completed 返回 true。T1 同时到达但被 cache 一致性挡在门外，等 T0 用完 line 才拿到独占，读到 Completed，与它的 expected(Pending) 不等，不写，返回 false。即：'同时开抢'在硬件层根本不存在——同一条 cache line 上的原子读-改-写被 MESI 协议**强制串行化**成某个顺序，谁先谁赢。所以互斥不是靠软件约定，是靠 lock 前缀拿独占。\n\n③ 两件事互不替代：\n- 原子性/互斥 ← 由 **lock 前缀**保证：不会有两个人同时赢。\n- 可见性/顺序 ← 由 **memory_order**（acq_rel）保证：赢家在 CAS 之前写的其它内存，输家在读到结果之后必须能看到。\n只加锁不写内存序，在弱内存序架构（ARM）上照样出错；在 x86 上因为 TSO 太强，写错了也测不出来。所以不能拿 x86 的测试通过来证明内存序写对了。",
+      "reference": "nebula/rpc/rpc_call.h、nebula/rpc/rpc_call.cpp:11-20"
+    },
+    {
+      "id": "q2",
+      "title": "取消输给响应时的终态自洽",
+      "dimension": "prediction",
+      "max_score": 15,
+      "tags": [
+        "rpc_channel",
+        "rpc_controller",
+        "取消竞速"
+      ],
+      "question": "禁止运行程序。场景：主线程调用 stub.Echo(...) 之后立刻调用 controller.StartCancel()，而且这一次**响应帧先到、取消后到**。\n\n① done 一共执行几次？由哪条路径执行？在哪个线程执行？执行时它处在谁的调用栈里？\n\n② CompleteCallWithCancel 会走到哪一步就返回？它有没有摘过 pending_calls_ 的条目？\n\n③ done 里读到的 controller.Failed() 和 controller.IsCanceled() 分别是 true 还是 false？其中有一个值与\"这次调用实际是成功的\"这个事实矛盾——是哪一个，机制上的原因是什么？并说明在这种情况下，业务代码要判断'这次到底是不是被取消了'，唯一可靠的依据是什么。",
+      "standard_answer": "① done 恰好执行 **1 次**，由响应路径 CompleteCallWithFrame 执行，**在 loop 线程**。\n链条：OnMessage → HandleFrame → CompleteCallWithFrame → TryComplete(Completed) 抢到完成权 → TakePendingCall 摘除资源 → loop_->RunInLoop(CompleteFrame)。因为此刻已经在 loop 线程，RunInLoop **内联执行**，所以 ParseFromString + done->Run() 都在 loop 线程完成，而且处在 **OnMessage 里那个 while 解码循环的调用栈内**（不是等下一拍）。\n\n② CompleteCallWithCancel 的第一步就返回：它 find(request_id) 得到一个 end()，因为条目已经被响应路径 TakePendingCall erase 掉了。\n它**没有摘过**任何条目，不会 CAS，不会执行 done。它甚至可能压根没被排上队（若 StartCancel 早于响应完成，则 cancel 闭包会投递到 loop 线程再回来，此时查表为空）。\n\n③ Failed() == **false**（响应路径解析成功，没调用 SetFailed）；IsCanceled() == **true**，矛盾就在这一个。\n原因：RpcController::StartCancel 是**无条件**把 canceled_ 置 true 的（rpc_controller.cpp:54，先判断 canceled_ 是否已为真就 return，然后立刻 true），它从不与 RpcCall 的状态仲裁对账。所以 canceled_ 表达的是\"业务**按过**取消按钮\"这个**意图**，而不是\"这次调用最终的结局是取消\"。\n副作用：'取消赢'和'取消输给响应'在 API 上长得一模一样——\n  取消赢：     IsCanceled()==true，Failed()==false，response **未填**\n  响应赢：     IsCanceled()==true，Failed()==false，response **已填**\n唯一可靠的判据是**看 response 有没有被填充**（或者说这次调用的 RpcCall 终态，但它在 channel 内部、业务看不见）。仓库里 tests/rpc_cancel_test.cpp:163-173 正是这么判的：用 response.text().empty() 区分两种终态，而不是用 IsCanceled()。",
+      "reference": "nebula/rpc/rpc_channel.cpp:424-457、493-527；nebula/rpc/rpc_controller.cpp:42-70；tests/rpc_cancel_test.cpp:163-173"
+    },
+    {
+      "id": "q3",
+      "title": "TakePendingCall 的四项清理与取消路径的摘空",
+      "dimension": "implementation",
+      "max_score": 20,
+      "tags": [
+        "rpc_channel",
+        "资源收口",
+        "所有权"
+      ],
+      "question": "RpcChannel::TakePendingCall 是四条完成路径唯一的清理收口。\n\n① 逐项写出它做了哪四件事。\n\n② 对每一件事回答：如果不做，会有什么**具体后果**？（要具体到某个对象、某个容器、某个回调，不要写\"会有内存泄漏\"这种笼统结论。）\n\n③ 取消路径自己触发 TakePendingCall 时，RemoveOnCancel(cancel_token) 会摘不到回调。为什么这是**正常情况**而不是 bug？此时那个回调对象的所有权在谁手上、由谁负责释放？",
+      "standard_answer": "① 四件事，按代码顺序：\n1) pending_calls_.find(request_id) → 把条目 std::move 出来 → erase(it)。\n2) timeout_timer 有效时 loop_->CancelTimer(timeout_timer)。\n3) cancel_token >= 0 时，dynamic_cast 出 RpcController，调用 RemoveOnCancel(cancel_token)。\n4) RemovePendingWrite(request_id)。\n\n② 不做的后果：\n1) 不摘表：在途记录泄漏，request_id 永久占用；更重要的是迟到的响应仍会被当成有效调用处理，以及该条目带的定时器与取消回调都不会被回收。\n2) 不取消定时器：那个捕获了 this 和 request_id 的定时器回调在调用早已完成后仍然到期触发，OnTimeout 会去操作一个不存在的 request_id；如果它发生在 RpcChannel 析构之后，就是对已亡对象的调用（被交出去的 fd 早已关闭）。FailAllPendingNow 的注释写的就是这一点。\n3) 不摘取消回调：RpcController 回调用列表里留着一个捕获 weak_ptr<AliveGuard> 与 request_id 的 RpcClosure。controller 归业务所有、可能被 Reset() 复用（Reset 会 swap 出来 delete 掉），所以不会立刻崩；但真正的问题是所有权不再由完成路径收敛——controller 活得比 channel 久时，下次 StartCancel 会为一个早已完成的 request_id 追投一次取消完成路径。\n4) 不清 pending_writes_：未连接时排队的那段 bytes 滞留在 deque 里；连接建立后 OnConnection 冲刷时会先查 pending_calls_.contains(request_id)，所以后果是 deque 里滞留无用字节，而**不是**重复发送（这一步挡门是刻意设计的）。\n\n③ 正常的原因：StartCancel 在锁内先做了 callbacks.swap(cancel_callbacks_)，把整张回调表**整体夺走**到自己的局部变量里，然后在锁外逐个 Run()。条目在 controller 里已经不存在了，RemoveOnCancel 线性扫不到就返回（rpc_controller.cpp:128 的注释：'找不到是正常情况：回调可能已被 StartCancel 换走执行'）。\n所有权：此时回调对象的所有权已经跟着 swap 转移到 StartCancel 的局部 vector，由它负责 Run()（RpcClosure 的 lambda 自删除，所以 Run 完即释放）。RpcChannel 那边做的 RemoveOnCancel 只是\"尝试收回自己那一份\"，收不到就说明取消路径已经赢了；两条路径互斥（都在同一把 mutex_ 下操作列表），所以永远不会出现 double free。",
+      "reference": "nebula/rpc/rpc_channel.cpp:387-422、529-539；nebula/rpc/rpc_controller.cpp:42-70、121-142"
+    },
+    {
+      "id": "q4",
+      "title": "删掉\"第二步重新查表\"的具体故障",
+      "dimension": "diagnosis",
+      "max_score": 20,
+      "tags": [
+        "rpc_channel",
+        "RegisterAndSend",
+        "迭代器失效"
+      ],
+      "question": "具体故障场景：有人觉得 RegisterAndSend 里\"注册取消回调\"之后的重新查表是多余的，于是把这一段删掉了——也就是不再做 alive_it = pending_calls_.find(request_id) 与if (alive_it == pending_calls_.end()) return;，直接沿用第一步 emplace 拿到的迭代器 it 继续往下走（写 cancel_token、挂定时器、发送）。\n\n① 在哪一种时序下这段删除会立刻出事？把从 RegisterOnCancel 调用到返回的**完整调用链**写出来，说明每一步在哪个线程执行。\n\n② 出事的具体形式是什么（访问什么对象的什么字段、为什么那个引用/迭代器已经无效）？\n\n③ 除了崩溃之外，还会产生什么\"不崩但错\"的可观测结果？\n\n④ 根因归纳成一句话。",
+      "standard_answer": "① 时序：调用方在**注册之前**就已经调过 StartCancel（或另一个线程在注册瞬间抢先调），因此 controller 的 canceled_ 已经是 true。\n调用链（全部在 **loop 线程**，RegisterAndSend 开头就有 AssertInLoopThread）：\n  RegisterAndSend\n   → pending_calls_.emplace(request_id, ...)          // 刚插进去，it 指向它\n   → rpc_controller->RegisterOnCancel(new RpcClosure(...))\n      → 锁内 !canceled_ 为假 → 不插表，直接走到锁外\n      → callback->Run()                               // **内联执行**，就在 loop 线程上\n         → 闭包体 loop->RunInLoop(...)\n            → 当前已在 loop 线程 → RunInLoop **内联**，不再排队\n               → CompleteCallWithCancel(request_id)\n                  → TryComplete(Cancelled) 成功 → TakePendingCall\n                     → **erase 掉刚 emplace 的那个条目**\n                       → done 经 QueueInLoop 排队（等回到 loop 事件循环再跑）\n      → 返回 token = -1\n   → 回到 RegisterAndSend，此时 it 指向的节点**已经被 erase**。\n\n② 出事形式：删除第二步后，代码继续用 it 写 alive_it->second.cancel_token —— 但 unordered_map 的 erase 会让指向被删元素的迭代器**失效**。在 libstdc++ 的实现里，该节点是链表的独立节点，erase 会直接 delete 掉它，所以 it->second 是对**已释放内存**的访问（use-after-free）。即便不立刻崩，写的也是一块不再属于这张表的内存，而 done 已经排进了队列——两条路径对同一次调用给出了两种结局。\n这也是代码里先把 token 存进局部变量、再重新查表的原因；注释原文就是：'若 controller 已取消，RegisterOnCancel 会立即内联执行回调，内联完成路径会摘除刚插入的 pending，此后 it 失效，所以 token 必须先存局部变量，下面重新查表确认条目还在。'\n\n③ 不崩但错的结果：\n  - 第三步会把一个**已经被取消的请求**的 timeout_timer 挂上（写进失效内存那一份），而真正的条目已经不在表里，这个定时器永远不会被 TakePendingCall 取消；到期时 OnTimeout 去查一个不存在的 request_id，什么也做不了，纯属残渣。\n  - 第四步会把这段 bytes 送出去：若当时已连接，connection_->Send(bytes) 会把一个业务已经放弃的请求发到服务端；若未连接，则 push_back 进 pending_writes_，之后 OnConnection 冲刷时靠 contains(request_id) 把它跳过去——所以这里\"不重复发送\"是别的挡门救的，不是这段代码对的。\n  - 最关键的是 done 的执行顺序被破坏：取消完成路径已经排好 done，而这段代码还在把自己当成\"请求有效\"继续推进，语义上把一次已取消的调用又登记了一轮。\n\n④ 根因一句话：RegisterOnCancel 在已取消时是**同步内联**执行回调的（不是\"以后再说\"），而那个回调会通过 loop->RunInLoop 在同一个 loop 线程上**内联**跑完整个取消完成路径、把刚插入的 pending 摘掉——所以 emplace 得到的迭代器在 RegisterOnCancel 返回后就已经失效，\"注册后必须重新查表\"是这条内联链路的必然要求，不是防御性冗余。",
+      "reference": "nebula/rpc/rpc_channel.cpp:209-297（重点 236-274）；nebula/rpc/rpc_controller.cpp:97-119；nebula/net/event_loop.cpp 的 RunInLoop"
+    },
+    {
+      "id": "q5",
+      "title": "破坏 expected 之后的机制迁移",
+      "dimension": "transfer",
+      "max_score": 15,
+      "tags": [
+        "rpc_call",
+        "不变量",
+        "状态机"
+      ],
+      "question": "破坏性修改：把 RpcCall::TryComplete 的 expected 从\"恒为 Pending\"改成\"先 state_.load() 读到什么就用什么当 expected\"——也就是允许从任意状态迁移到任意终态。\n\n① 请逐条说明四条完成路径（响应 / 超时 / 断连与析构 / 取消）在这个新语义下会各自发生什么。\n\n② done 会不会被执行两次？请分别回答\"取消先到、响应后到\"和\"超时先到、析构后到\"两种顺序。\n\n③ 由此归纳：TryComplete 真正保护的那条**不变量**是什么？expected 恒为 Pending 是实现手段还是多余的形式？\n\n（提示：注意 TakePendingCall 在查表失败时会 return，这会让某些顺序下的 done 计数看起来还是对的。）",
+      "standard_answer": "① 四条路径的行为都变成\"最后写的人赢\"：\n- 响应 CompleteCallWithFrame：只要条目还在表里，它就能把状态写成 Completed；如果此前取消已经把状态写成 Cancelled，这次覆盖使同一次调用被宣布了**两个不同的结局**。\n- 超时 OnTimeout → CompleteCallWithFailure(Timeout)：同理可以覆盖更早的终态。\n- 断连 FailAllPending(...Failed) 与析构 FailAllPendingNow(...Failed)：后者有个细节——它**无论是否抢到完成权都会调用 TakePendingCall**（清理是强制的），只用一个 won 标志决定要不要 CompleteFailure；所以在新语义下 won 恒为 true，它会把已经写好的 Timeout 覆盖成 Failed。\n- 取消 CompleteCallWithCancel：可以覆盖 Completed——业务明明已经拿到正常响应，随后一次迟到的 StartCancel 会把状态改写成 Cancelled，终态与事实相反。\n\n内部一致性还表现在：**同一个错误文本会变**。原语义下 timeout 先到，业务读到的 ErrorText 是稳定的 'RPC timeout'；新语义下随后到达的析构路径会把它覆盖成 'RPC channel closed'——错误归因就错了。\n\n② done 计数：\n- '取消先到、响应后到'：取消路径 CAS 成功 → TakePendingCall 把条目 erase → done 排队执行一次；响应后到时 CompleteCallWithFrame 第一步 find 就落空 → 直接 return。所以 done 仍然只有 1 次。**但这不是状态机的功劳，是 pending_calls_ 存在性兜底的功劳**。\n- '超时先到、析构后到'：同理，析构路径 find 落空（条目已被超时摘走）→ continue。done 也只有 1 次。\n  ⇒ 结论：在**单线程 loop 模型 + 所有完成路径都必须先摘表**这两个前提下，破坏 expected 一时看不出 done 计数异常；这正是 notes/00 里写的\"单线程下 TryComplete 看似多余\"的原因。代价是\"恰好一次\"这条不变量不再由状态机保证，而是退化成一个隐式约定（谁先摘到表谁赢）。只要将来有任意一条路径在执行 done 之前没摘表、或者从非 loop 线程摘表（表没有锁），就会立刻出现双重完成或 UB。\n\n③ 不变量：**每一次调用有且只有一个终态，且终态一旦确定就不可改写**（同时意味着不可能从终态退回 Pending）。\nexpected 恒为 Pending 是实现手段，不是多余形式：它把 CAS 的语义从\"条件写\"收窄成\"只允许 Pending → 终态\"的单向迁移。这也顺带解释了为什么\"超时后重试\"的正确做法是**新建一个 RpcCall**，而不是把状态改回 Pending。",
+      "reference": "nebula/rpc/rpc_call.cpp:11-20；nebula/rpc/rpc_channel.cpp:436、471、505、571-588"
+    },
+    {
+      "id": "q6",
+      "title": "done 与 NotifyOnCancel 的职责边界",
+      "dimension": "explanation",
+      "max_score": 15,
+      "tags": [
+        "rpc_controller",
+        "契约",
+        "一对多"
+      ],
+      "question": "RpcController 上有两条\"完成时会被调用\"的通道：调用方传进来的 done，以及 NotifyOnCancel 注册的取消回调。\n\n① 各自会被调用几次？一次 StartCancel 会触发几个取消回调？\n\n② 各自在哪个线程执行？（done 在四条完成路径上的线程语义要分别说。）\n\n③ 当前仓库里这两条通道各有几个订阅者？分别是谁？其中一个目前只有 1 个订阅者，为什么不把它简化成单个指针？\n\n④ 用一句话说明两者的分工，并举一个 done 无法替代取消回调的具体理由。",
+      "standard_answer": "① 次数：\n- done：**恰好 1 次**。四条完成路径都要先过 RpcCall::TryComplete 的仲裁，只有赢家执行 done。\n- 取消回调：一次 StartCancel 会 Run() **全部**已注册条目（当前是 0~N 个，逐个执行）；而在一个 controller 的整个生命周期里，StartCancel 只真正生效一次（canceled_ 闸门：第二个 StartCancel 直接 return）。\n  注意还要分两种注册时机：canceled_ 已为 true 时再 RegisterOnCancel，会对**新**注册者**内联立即执行**并返回 -1（所有权已转移，调用方不能再摘）。\n\n② 线程：\n- done：完成路径末尾。CompleteCallWithFrame 用 loop_->RunInLoop（rpc_channel.cpp:450）——因为这条路径本来就在 loop 线程，RunInLoop **内联执行**，done 跑在 OnMessage 的 while 解码循环栈内；CompleteCallWithFailure（:485）与 CompleteCallWithCancel（:520）用 **QueueInLoop**，即延迟到 loop 线程的下一拍。→ 这就是四条路径 done 语义不一致的地方。\n- 取消回调：在**调用 StartCancel 的那个线程**上执行（StartCancel 在锁外逐个 Run），业务线程调就是业务线程跑。channel 注册的那个回调自己不做实事，它只负责用 loop->RunInLoop 把 CompleteCallWithCancel 投递回 loop 线程。\n\n③ 订阅者：\n- done：每次调用 1 个，由业务提供；CallMethod 强制它非空（rpc_channel.cpp:141-145），因为这一版 RpcChannel 是纯异步接口，没有同步等待路径。\n- 取消回调：**全仓库只有 1 个**，就是 rpc_channel.cpp:247 注册的那个 RpcClosure。\n为什么不用单个指针：NotifyOnCancel 是 protobuf 的公开虚函数（rpc_controller.h:32），契约上任何持有 controller 的一方都可以挂。单槽实现里第二个注册者会**静默覆盖**第一个，被覆盖者既不 Run 也不 delete（回调丢失 + 内存泄漏，且没有任何告警）。另外即使今天只有一个订阅者，仍然需要**带 token 的可摘除能力**（channel 可能比 controller 先死，每次完成都必须能把自己那份摘掉；token 单调递增不复用是为了防 ABA），以及\"整体 swap 后在锁外执行\"这两条。多订阅者容量是顺应契约留的，今天用不满。\n\n④ 分工一句话：**done 是\"这一次调用的结果告诉你\"（只跑一次、是终点）；NotifyOnCancel 是\"这个 controller 被取消了，你手里跟这次调用绑定的资源快收拾\"（可多方挂载、是发生在 done 之前的撤离通知）。**\ndone 无法替代它的理由：channel 必须在**结果产生之前**就把 pending_calls_ 条目、超时定时器和 pending_write 撤掉，而这三件事正是它注册的那个取消回调干的活。如果只靠 done，done 一执行就等于这次调用已经终结，那时再摘表没有意义，而且会和完成路径自己调用的 TakePendingCall 抢同一份资源。更根本的是：controller 归业务所有、可能比 channel 活得久，所以必须有\"可摘除\"的机制；done 是一次性的终点，既没有身份也没有摘除语义。",
+      "reference": "nebula/rpc/rpc_controller.h:32、39-52；nebula/rpc/rpc_controller.cpp:42-70、97-119；nebula/rpc/rpc_channel.cpp:236-274、424-527"
+    }
+  ]
+}
