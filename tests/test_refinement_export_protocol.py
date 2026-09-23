@@ -84,10 +84,10 @@ class RefinementExportProtocolTests(unittest.TestCase):
         prompt = build_refinement_ai_prompt(_node(), _bundle())
         self.assertIn("task_groups[].items[]", prompt)
         self.assertIn("禁止合并、删除或改名", prompt)
-        self.assertIn("20~30", prompt)
+        self.assertIn("5~12", prompt)
         self.assertIn("NRPC-TEST-V1.2", prompt)
         self.assertIn("version=2", prompt)
-        self.assertIn("只返回 **一个合法 JSON 对象**", prompt)
+        self.assertIn("必须且只能包含一个合法 JSON 对象", prompt)
 
     def test_export_zip_contains_same_clipboard_prompt_and_self_check(self):
         node = _node()

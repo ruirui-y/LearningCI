@@ -31,18 +31,18 @@ class RefinementBridgeTests(unittest.TestCase):
 
     def test_only_three_node_window_can_be_refined(self):
         rows = {x["node_code"]: x for x in self.service.list_preparation_nodes()}
-        self.assertTrue(rows["NRPC-S0-01"]["in_prepare_window"])
-        self.assertTrue(rows["NRPC-S0-02"]["in_prepare_window"])
-        self.assertTrue(rows["NRPC-S0-03"]["in_prepare_window"])
-        self.assertFalse(rows["NRPC-S0-04"]["in_prepare_window"])
+        self.assertTrue(rows["NRPC-R0-01"]["in_prepare_window"])
+        self.assertTrue(rows["NRPC-R0-02"]["in_prepare_window"])
+        self.assertTrue(rows["NRPC-B0-01"]["in_prepare_window"])
+        self.assertFalse(rows["NRPC-N1-01"]["in_prepare_window"])
         with self.assertRaises(RuntimeError):
             self.service.export_refinement_package(
-                rows["NRPC-S0-04"]["id"], self.tmp_path / "far.zip"
+                rows["NRPC-N1-01"]["id"], self.tmp_path / "far.zip"
             )
 
     def test_export_package_uses_chinese_file_names(self):
-        node = self.service.get_node_by_code("NRPC-S0-02")
-        target = self.tmp_path / "S0-02节点细化包.zip"
+        node = self.service.get_node_by_code("NRPC-R0-02")
+        target = self.tmp_path / "R0-02节点细化包.zip"
         result = self.service.export_refinement_package(node["id"], target)
         self.assertEqual(result, target)
         with zipfile.ZipFile(result) as zf:
@@ -60,18 +60,18 @@ class RefinementBridgeTests(unittest.TestCase):
         self.assertTrue(expected.issubset(names))
 
     def test_chatgpt_result_is_staged_before_install(self):
-        node = self.service.get_node_by_code("NRPC-S0-02")
-        source = BUNDLE_DIR / "NRPC-S0-02.json"
+        node = self.service.get_node_by_code("NRPC-R0-02")
+        source = BUNDLE_DIR / "NRPC-R0-02.json"
         data = json.loads(source.read_text(encoding="utf-8"))
         data["compiler"]["status"] = "REVIEWED"
-        candidate = self.tmp_path / "NRPC-S0-02_已细化.json"
+        candidate = self.tmp_path / "NRPC-R0-02_已细化.json"
         candidate.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         staged_dir = self.tmp_path / "待审核"
         with patch("learningci.core.refinement_bridge.REFINE_PROPOSED_DIR", staged_dir):
             preview = self.service.preview_refined_bundle(node["id"], candidate)
         self.assertEqual(preview["new_state"], "REVIEWED")
         self.assertTrue(Path(preview["staged_path"]).exists())
-        self.assertEqual(self.service.get_bundle_state(node["id"]), "GENERATED")
+        self.assertEqual(self.service.get_bundle_state(node["id"]), "REVIEWED")
 
 
 if __name__ == "__main__":

@@ -73,7 +73,7 @@ class RefinementStructureTests(unittest.TestCase):
         result = analyze_refinement_structure(old, new)
         self.assertEqual(result["errors"], [])
         self.assertEqual(result["new_tasks"], 25)
-        self.assertEqual(result["warnings"], [])
+        self.assertTrue(any("5~12" in warning for warning in result["warnings"]))
 
     def test_group_split_is_allowed_with_warning(self):
         old = _bundle(["protobuf", "pending", "receiver", "server", "timeout"], 4)
@@ -82,13 +82,13 @@ class RefinementStructureTests(unittest.TestCase):
         self.assertEqual(result["errors"], [])
         self.assertTrue(any("增加" in warning for warning in result["warnings"]))
 
-    def test_task_count_outside_20_30_only_warns(self):
+    def test_task_count_outside_5_12_only_warns(self):
         old = _bundle(["a", "b", "c", "d", "e"], 4)
         new = _bundle(["a", "b", "c", "d", "e"], 7)
         result = analyze_refinement_structure(old, new)
         self.assertEqual(result["errors"], [])
         self.assertEqual(result["new_tasks"], 35)
-        self.assertTrue(any("20~30" in warning for warning in result["warnings"]))
+        self.assertTrue(any("5~12" in warning for warning in result["warnings"]))
 
     def test_existing_verification_paper_is_immutable(self):
         old = _bundle(["a", "b", "c", "d", "e"], 4)

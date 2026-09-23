@@ -25,10 +25,10 @@ def _json_text(data: object) -> str:
     return json.dumps(data, ensure_ascii=False, indent=2) + "\n"
 
 
-RECOMMENDED_LEAF_TASK_MIN = 20
-RECOMMENDED_LEAF_TASK_MAX = 30
-SOFT_LEAF_TASK_MIN = 15
-SOFT_LEAF_TASK_MAX = 35
+RECOMMENDED_LEAF_TASK_MIN = 5
+RECOMMENDED_LEAF_TASK_MAX = 12
+SOFT_LEAF_TASK_MIN = 3
+SOFT_LEAF_TASK_MAX = 16
 
 # Node refinement is intentionally narrow: AI may change task groups/task_count/compiler only.
 # Stable bundle metadata and assessment policy must be copied from the current bundle unchanged.
@@ -44,28 +44,56 @@ PROTECTED_REFINEMENT_FIELDS = (
 )
 
 
-def _is_implementation_node(node: dict) -> bool:
-    """Stage 1+ is the code-execution zone; Stage 0 remains recovery/audit/setup."""
+def _execution_mode(node: dict) -> str:
+    mode = str(node.get("execution_mode", "") or "").upper()
+    if mode in {"REVIEW", "MIGRATE", "BUILD", "VALIDATE"}:
+        return mode
     try:
-        return int(node.get("stage", 0)) >= 1
+        return "REVIEW" if int(node.get("stage", 0)) == 0 else "BUILD"
     except (TypeError, ValueError):
-        return False
+        return "BUILD"
 
 
 def _implementation_rules(node: dict) -> str:
-    if not _is_implementation_node(node):
-        return ""
+    mode = _execution_mode(node)
+    if mode == "REVIEW":
+        return f"""
+
+【REVIEW 节点硬规则】
+当前 Node `{node['node_code']}` 是旧项目快速回顾，不是重新实现任务。
+- 只保留能快速恢复关键调用链、状态与边界的动作；禁止要求重新手写已经完成过的 Reactor/RPC 基础。
+- 不要求大篇审计文档，不得为了留证据制造重复整理任务。
+- 推荐 4~6 个叶子任务；源码定位、已有测试运行、闭卷解释可以合并在同一任务中。
+- 达到“能解释、能修改、能调试”即可结束回顾。
+"""
+    if mode == "MIGRATE":
+        return f"""
+
+【MIGRATE 节点硬规则】
+当前 Node `{node['node_code']}` 是 AI 辅助迁移节点。
+- 允许并鼓励直接从旧项目搬运可复用实现，再做裁剪、重命名、模块化和测试；禁止为了学习形式从零重写。
+- 学习者必须理解迁入代码的关键所有权/调用链，并负责 build/test/fix。
+- 第一批任务应该尽快形成可运行 baseline；不要把“阅读/定位”拆成大量独立任务。
+- 推荐 5~10 个叶子任务，以“迁移 → 编译 → 运行 → 修复 → baseline commit”为主。
+"""
+    if mode == "VALIDATE":
+        return f"""
+
+【VALIDATE 节点硬规则】
+当前 Node `{node['node_code']}` 以实验、数据、复现和求职证据为主。
+- 任务必须围绕可重复命令、原始数据、profile、故障证据或作品化产物。
+- 禁止为了任务数量增加无关代码或重复总结。
+- 推荐 5~10 个叶子任务。
+"""
     return f"""
 
-【实现型节点硬规则】
-当前 Node `{node['node_code']}` 已进入 Stage {node['stage']}，属于代码实现节点，不是历史审计节点。
-- 第一组第一个实质叶子任务必须产生真实工程修改并能编译/运行验证；不能把“定位/阅读/追踪/确认旧源码”作为主要成果。
-- 阅读旧实现只能作为某个 coding task 的辅助步骤，禁止大量独立生成“定位、追踪、确认”类叶子任务。
-- 任务组织优先采用：实现 → 编译 → 运行/测试 → 日志/strace/故障诊断 → 修复/再验证。
-- 至少 60% 的叶子任务必须产生一种真实工程结果：新增/修改 C++ 代码、编译通过、测试通过、运行日志、strace/故障实验或 bug 修复。
-- `project_anchor` 表示本节点主要写入/验证的工程位置，不是单纯阅读位置。
-- Recovery Zone 的“恢复”是快速把已有能力写回新工程，不是再次审计旧项目。
-- 禁止生成 `gate` / `验收准备` 任务组；是否具备正式验收条件由 LearningCI 自动检查。
+【BUILD 节点硬规则】
+当前 Node `{node['node_code']}` 属于新能力实现。
+- 第一组第一个实质任务必须尽快产生真实工程修改并能编译/运行验证。
+- 任务组织优先：实现 → 测试/故障 → 修复 → 数据/证据；阅读资料只能作为实现任务的辅助步骤。
+- 至少一半任务必须直接产生代码、测试、运行日志、故障实验、Sanitizer 或性能数据。
+- 推荐 5~12 个高质量叶子任务，禁止重新膨胀为 20~30 个碎片任务。
+- 禁止生成 gate / 验收准备任务组。
 """
 
 def _task_signature(task: dict) -> str:
@@ -219,7 +247,7 @@ def build_refinement_ai_prompt(node: dict, bundle: dict) -> str:
 5. 以 `03-当前节点执行包.json` 为结构骨架。除 `task_groups`、`task_count`、`compiler` 外，其余已有顶层字段必须原样复制，不能删除或改写。
 6. 叶子任务必须使用规范字段 `task_groups[].items[]`；不要输出 `leaf_tasks` 或 `tasks`。
 7. 必须保留 03 中所有既有技术 `task_group.id` 及其技术语义；禁止合并、删除或改名。`gate` / `验收准备` 属于系统流程任务，禁止生成；允许为了独立技术小节新增任务组。
-8. 单节点通常细化到 **20~30 个高质量叶子任务**；15~35 是弹性范围。覆盖完整优先，禁止用重复总结、重复抄文档凑数量。
+8. 单节点通常细化到 **5~12 个高质量叶子任务**；3~16 是弹性范围。节点越简单越不要硬拆，禁止用重复总结、重复定位、重复抄文档凑数量。
 9. `must_learn` 每一项都必须被至少一个叶子任务显式覆盖，并能通过 `done_when` 与证据字段验证。
 10. `task_count` 必须等于全部 `task_groups[].items[]` 的实际数量。
 11. `compiler.status` 必须是 `REVIEWED`。

@@ -9,7 +9,7 @@ from learningci.database import Database
 
 
 REQUIRED_NODE_FIELDS = {
-    "id", "stage", "order", "title", "capability", "tasks", "scoring"
+    "id", "stage", "order", "title", "capability", "execution_mode", "tasks", "scoring"
 }
 
 
@@ -64,13 +64,13 @@ def ensure_plan_imported(db: Database, path: Path) -> int:
         for node in sorted(data["nodes"], key=lambda x: int(x["order"])):
             conn.execute(
                 """INSERT INTO nodes(
-                    plan_id,node_code,stage,order_index,title,capability,priority,target_score,status,
+                    plan_id,node_code,stage,order_index,title,capability,execution_mode,priority,target_score,status,
                     tasks_json,must_learn_json,out_of_scope_json,scoring_json,project_anchor_json,
                     created_at,updated_at
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     plan_id, node["id"], str(node["stage"]), int(node["order"]),
-                    node["title"], node["capability"], node.get("priority", "CORE"),
+                    node["title"], node["capability"], node.get("execution_mode", "BUILD"), node.get("priority", "CORE"),
                     int(node.get("target_score", 80)), "READY",
                     json.dumps(node.get("tasks", []), ensure_ascii=False),
                     json.dumps(node.get("must_learn", []), ensure_ascii=False),

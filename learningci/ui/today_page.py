@@ -338,7 +338,7 @@ class TodayPage(QWidget):
                 btn.setEnabled(False)
             return
 
-        self.node_code.setText(f"{self.node['node_code']}  ·  Stage {self.node['stage']}  ·  {self.node['priority']}")
+        self.node_code.setText(f"{self.node['node_code']}  ·  Stage {self.node['stage']}  ·  {self.node.get('execution_mode', 'BUILD')}  ·  {self.node['priority']}")
         self.node_title.setText(self.node["title"])
         self.capability.setText(self.node["capability"])
         anchor = self.node.get("project_anchor", {})

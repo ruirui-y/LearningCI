@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA_SQL = r"""
 PRAGMA foreign_keys = ON;
@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS nodes (
     order_index INTEGER NOT NULL,
     title TEXT NOT NULL,
     capability TEXT NOT NULL,
+    execution_mode TEXT NOT NULL DEFAULT 'BUILD',
     priority TEXT NOT NULL DEFAULT 'CORE',
     target_score INTEGER NOT NULL DEFAULT 80,
     status TEXT NOT NULL DEFAULT 'READY',
@@ -234,6 +235,10 @@ class Database:
             self.conn.execute("ALTER TABLE node_bundles ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
         if "updated_at" not in columns:
             self.conn.execute("ALTER TABLE node_bundles ADD COLUMN updated_at TEXT")
+
+        node_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(nodes)").fetchall()}
+        if "execution_mode" not in node_columns:
+            self.conn.execute("ALTER TABLE nodes ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'BUILD'")
 
         score_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(score_records)").fetchall()}
         if "issues_json" not in score_columns:

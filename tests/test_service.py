@@ -27,15 +27,15 @@ class ServiceTests(unittest.TestCase):
 
     def test_active_node_is_first_unpassed(self):
         node = self.service.get_active_node()
-        self.assertEqual(node["node_code"], "NRPC-S0-01")
+        self.assertEqual(node["node_code"], "NRPC-R0-01")
 
     def test_leaf_tasks_are_initialized(self):
         node = self.service.get_active_node()
         tree = self.service.get_leaf_task_tree(node["id"])
         tasks = [item for group in tree for item in group["items"]]
-        self.assertEqual(len(tasks), 30)
+        self.assertEqual(len(tasks), 5)
         done, total, pct = self.service.task_completion(node["id"])
-        self.assertEqual((done, total, pct), (0, 30, 0))
+        self.assertEqual((done, total, pct), (0, 5, 0))
 
     def test_evidence_required_before_completion(self):
         node = self.service.get_active_node()
@@ -47,24 +47,24 @@ class ServiceTests(unittest.TestCase):
         self.service.set_leaf_task_completed(node["id"], task["id"], True)
         done, total, pct = self.service.task_completion(node["id"])
         self.assertEqual(done, 1)
-        self.assertEqual(total, 30)
+        self.assertEqual(total, 5)
         self.assertGreater(pct, 0)
 
 
     def test_section_exam_context_uses_master_plan_and_node_boundaries(self):
         node = self.service.get_active_node()
         context = self.service.get_section_exam_context(node["id"])
-        self.assertEqual(context["current_node"]["node_id"], "NRPC-S0-01")
-        self.assertIn("重新实现 Reactor", context["current_node"]["out_of_scope"])
+        self.assertEqual(context["current_node"]["node_id"], "NRPC-R0-01")
+        self.assertIn("重新手写一遍 MyMuduo", context["current_node"]["out_of_scope"])
         refs = {item["ref"] for item in context["master_plan_excerpts"]}
-        self.assertIn("4.1", refs)
-        self.assertIn("5.1", refs)
-        self.assertIn("5.2", refs)
-        self.assertIn("5.3", refs)
+        self.assertIn("2.1", refs)
+        self.assertIn("2.2", refs)
+        self.assertIn("3", refs)
+        self.assertIn("4", refs)
         text = "\n".join(item["text"] for item in context["master_plan_excerpts"])
-        self.assertIn("MyMuduo 已经证明的能力", text)
-        self.assertIn("不复制整个 MyMuduo", text)
-        self.assertIn("Recovery Zone", text)
+        self.assertIn("MyMuduo", text)
+        self.assertIn("AI 辅助迁移", text)
+        self.assertIn("Async RPC", text)
         self.assertIn("不得因为学习者没有主动规划未来阶段而扣边界判断分", context["boundary_policy"])
 
     def test_section_assessment_uses_leaf_evidence_and_invalidates_on_edit(self):
@@ -98,32 +98,18 @@ class ServiceTests(unittest.TestCase):
         self.assertTrue(latest["stale"])
         self.assertFalse(latest["passed"])
 
-    def test_s0_01_verification_uses_v13_without_duplicate_evidence_entry(self):
+    def test_review_verification_uses_v04_generated_paper(self):
         node = self.service.get_active_node()
         paper = self.service.get_frozen_verification_paper(node["id"])
-        self.assertEqual(paper["paper_id"], "NRPC-S0-01-V1.3")
-        self.assertEqual(paper["version"], 4)
-        by_dim = {q["dimension"]: q for q in paper["questions"]}
-        self.assertIn("不要重新抄源码路径", by_dim["explanation"]["question"])
-        self.assertIn("只写预测和原因", by_dim["prediction"]["question"])
-        self.assertFalse(by_dim["implementation"].get("requires_answer", True))
-        self.assertIn("系统自动复核项", by_dim["implementation"]["question"])
-        self.assertIn("具体故障诊断", by_dim["diagnosis"]["question"])
-        self.assertIn("SO_ERROR", by_dim["diagnosis"]["question"])
-        self.assertIn("不要求重新抄源码路径", by_dim["transfer"]["question"])
-        self.assertNotIn("必须重新设计后才能使用", by_dim["transfer"]["question"])
+        self.assertEqual(paper["paper_id"], "NRPC-R0-01-V1")
+        self.assertEqual(paper["version"], 1)
+        self.assertEqual(len(paper["questions"]), 5)
 
-    def test_s0_02_verification_also_uses_system_implementation_review(self):
-        node = self.service.get_node_by_code("NRPC-S0-02")
+    def test_second_review_node_has_standard_verification_paper(self):
+        node = self.service.get_node_by_code("NRPC-R0-02")
         paper = self.service.get_frozen_verification_paper(node["id"])
-        self.assertEqual(paper["paper_id"], "NRPC-S0-02-V1.2")
-        self.assertEqual(paper["version"], 3)
-        by_dim = {q["dimension"]: q for q in paper["questions"]}
-        self.assertIn("不要求重新抄源码路径", by_dim["explanation"]["question"])
-        self.assertFalse(by_dim["implementation"].get("requires_answer", True))
-        self.assertIn("系统自动复核项", by_dim["implementation"]["question"])
-        self.assertIn("具体故障诊断", by_dim["diagnosis"]["question"])
-        self.assertNotIn("哪些参数或实现需要调整", by_dim["transfer"]["question"])
+        self.assertEqual(paper["paper_id"], "NRPC-R0-02-V1")
+        self.assertEqual(sum(q["max_score"] for q in paper["questions"]), 100)
 
     def test_verification_evidence_context_reuses_leaf_evidence(self):
         node = self.service.get_active_node()
@@ -144,7 +130,7 @@ class ServiceTests(unittest.TestCase):
             "weaknesses": [],
         })
         context = self.service.get_verification_evidence_context(node["id"])
-        self.assertEqual(context["node_id"], "NRPC-S0-01")
+        self.assertEqual(context["node_id"], "NRPC-R0-01")
         self.assertIn("不需要在正式测试中重新抄写", context["policy"])
         self.assertEqual(len(context["groups"]), 1)
         exported = context["groups"][0]
@@ -156,7 +142,7 @@ class ServiceTests(unittest.TestCase):
     def test_open_old_verification_draft_is_superseded_without_score(self):
         node = self.service.get_active_node()
         old_paper = {
-            "paper_id": "NRPC-S0-01-V1.2",
+            "paper_id": "NRPC-R0-01-OLD",
             "version": 3,
             "visible_from_start": True,
             "frozen": True,
@@ -178,7 +164,7 @@ class ServiceTests(unittest.TestCase):
         score = self.db.conn.execute("SELECT 1 FROM score_records WHERE attempt_id=?", (old_id,)).fetchone()
         self.assertIsNone(score)
         new_attempt = self.service.get_attempt(new_id)
-        self.assertEqual(new_attempt["test"]["paper_id"], "NRPC-S0-01-V1.3")
+        self.assertEqual(new_attempt["test"]["paper_id"], "NRPC-R0-01-V1")
 
     def test_verification_answers_persist_for_autosave_reload(self):
         node = self.service.get_active_node()
@@ -390,10 +376,11 @@ class OptionalRouteTests(unittest.TestCase):
             ensure_plan_imported(db, PLAN_PATH)
             ensure_bundles_imported(db, BUNDLE_DIR)
             service = LearningService(db)
-            db.conn.execute("UPDATE nodes SET status='PASSED' WHERE priority!='OPTIONAL' AND CAST(stage AS INTEGER) < 15")
+            final_row = db.conn.execute("SELECT order_index FROM nodes WHERE node_code='NRPC-FINAL-01'").fetchone()
+            db.conn.execute("UPDATE nodes SET status='PASSED' WHERE priority!='OPTIONAL' AND order_index < ?", (final_row["order_index"],))
             db.conn.commit()
             node = service.get_active_node()
-            self.assertEqual(node["node_code"], "NRPC-S15-01")
+            self.assertEqual(node["node_code"], "NRPC-FINAL-01")
             db.close()
 
 

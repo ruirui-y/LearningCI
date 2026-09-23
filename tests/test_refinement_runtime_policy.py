@@ -82,10 +82,10 @@ def test_stage1_prompt_is_coding_first_and_forbids_gate():
     bundle = _bundle()
     normalize_bundle_for_learning(bundle)
     prompt = build_refinement_ai_prompt(_node(), bundle)
-    assert "属于代码实现节点，不是历史审计节点" in prompt
-    assert "第一组第一个实质叶子任务必须产生真实工程修改" in prompt
-    assert "至少 60%" in prompt
-    assert "禁止生成 `gate` / `验收准备`" in prompt
+    assert "【BUILD 节点硬规则】" in prompt
+    assert "第一组第一个实质任务必须尽快产生真实工程修改" in prompt
+    assert "至少一半任务" in prompt
+    assert "禁止生成 gate / 验收准备任务组" in prompt
 
 
 def test_structure_diff_allows_legacy_gate_removal_but_protects_technical_groups():

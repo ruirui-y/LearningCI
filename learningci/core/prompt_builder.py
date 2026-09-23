@@ -223,6 +223,7 @@ def build_section_grade_prompt(node: dict, group: dict, route_context: dict | No
             "冻结路线上下文（仅供考官做复用/恢复/重做边界判断，不是要求学习者额外回答）：",
             f"路线：{route_context.get('plan', {}).get('name', 'NebulaRPC')} {route_context.get('plan', {}).get('version', '')}",
             f"当前 Stage：{current.get('stage', node.get('stage', ''))}",
+            f"执行模式：{current.get('execution_mode', node.get('execution_mode', 'BUILD'))}",
             "当前节点必须掌握：" + _pretty(current.get("must_learn", node.get("must_learn", []))),
             "当前节点明确不做：" + _pretty(current.get("out_of_scope", node.get("out_of_scope", []))),
             f"节点来源章节：{current.get('source_section', '')}",

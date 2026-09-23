@@ -54,7 +54,7 @@ SECTION_PASS_SCORE = 80
 # 小节验收时，考官需要看到被冻结的架构路线，但学习者不需要在 10 分钟叶子任务里
 # 自己推断“未来该复用还是重做”。这些章节只作为边界判断的全局锚点；当前节点
 # 自己的 source_section 会另外自动加入。
-SECTION_EXAM_GLOBAL_ROUTE_REFS = ("5.1", "5.2", "5.3", "6")
+SECTION_EXAM_GLOBAL_ROUTE_REFS = ("2.1", "2.2", "3", "4")
 
 # v0.3.9: 历史审计节点正式验收去重继续保留；正式测试 FAIL 后新增结构化修正反馈。
 # 学习者只证明“源码里有什么、怎么工作、证据在哪里”；是否复用/恢复/重做由 Reviewer
@@ -940,7 +940,7 @@ class LearningService:
                     excerpts.append(section)
 
         nearby_rows = self.db.conn.execute(
-            """SELECT node_code,stage,order_index,title,capability,priority,status
+            """SELECT node_code,stage,execution_mode,order_index,title,capability,priority,status
                FROM nodes
                WHERE plan_id=? AND order_index BETWEEN ? AND ?
                ORDER BY order_index""",
@@ -957,6 +957,7 @@ class LearningService:
             "current_node": {
                 "node_id": node["node_code"],
                 "stage": node["stage"],
+                "execution_mode": node.get("execution_mode", "BUILD"),
                 "title": node["title"],
                 "capability": node["capability"],
                 "must_learn": node.get("must_learn", []),
