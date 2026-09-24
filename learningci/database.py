@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA_SQL = r"""
 PRAGMA foreign_keys = ON;
@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS studio_attempts (
     submitted_at TEXT,
     duration_seconds INTEGER NOT NULL DEFAULT 0,
     answers_json TEXT NOT NULL DEFAULT '{}',
+    inherited_from INTEGER,
     created_at TEXT NOT NULL,
     UNIQUE(paper_id, attempt_no)
 );
@@ -283,6 +284,13 @@ class Database:
         score_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(score_records)").fetchall()}
         if "issues_json" not in score_columns:
             self.conn.execute("ALTER TABLE score_records ADD COLUMN issues_json TEXT NOT NULL DEFAULT '[]'")
+
+        # 作答继承来源：记录这次作答的答案是抄自哪一条。作答中的批注靠它定位，
+        # 而不是靠“最近一次已评分的是哪条”——后者在“交了卷没评分就又开一次”时会张冠李戴。
+        # 故意不加外键：来源被删掉时这里留一个悬空 id，读取方按“找不到来源”处理即可。
+        studio_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(studio_attempts)").fetchall()}
+        if "inherited_from" not in studio_columns:
+            self.conn.execute("ALTER TABLE studio_attempts ADD COLUMN inherited_from INTEGER")
 
         # v0.2.0 already stored compiler.status inside bundle_json. Promote that state into
         # a dedicated column once so future generated bundles remain replaceable until frozen.

@@ -6,7 +6,8 @@ from pathlib import Path
 
 from learningci.core.paper_studio import (
     ATTEMPT_GRADED, ATTEMPT_OPEN, ATTEMPT_SUBMITTED, PaperStudio, PaperStudioError,
-    answers_are_blank, format_duration, normalize_grade, normalize_paper,
+    answers_are_blank, format_duration, group_issues_by_question, normalize_grade,
+    normalize_paper,
 )
 from learningci.database import Database
 
@@ -409,6 +410,126 @@ class AttemptInheritanceTests(unittest.TestCase):
         self.assertFalse(answers_are_blank({"q1": " 有内容 "}))
 
 
+class InheritedAnnotationTests(unittest.TestCase):
+    """作答中显示的历史批注：来源首先认「这次答案抄自哪一条」。
+
+    底稿交了卷却没评分时退一步挂最近一份已评分的，并用 `stale` 标出来；「重新作答」
+    没有 inherited_from，一律不挂任何批注。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / "test.db")
+        self.db.initialize()
+        self.studio = PaperStudio(self.db)
+        self.paper = self.studio.import_paper(sample_paper())
+
+    def tearDown(self):
+        self.db.close()
+        self.tmp.cleanup()
+
+    def graded_attempt(self, answers: dict, issues: list[dict]) -> dict:
+        attempt = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.studio.submit_attempt(attempt["id"], answers)
+        self.studio.import_grade(
+            attempt["id"], {"scores": {"q1": 30, "q2": 40}, "issues": issues}
+        )
+        return attempt
+
+    def test_issues_are_grouped_by_question(self):
+        grouped = group_issues_by_question([
+            {"question_id": "q1", "title": "a"},
+            {"question_id": "q2", "title": "b"},
+            {"question_id": "q1", "title": "c"},
+            {"title": "没有题号的整卷结论"},
+            "不是字典",
+            {"question_id": "", "title": "空题号"},
+        ])
+        self.assertEqual(sorted(grouped), ["q1", "q2"])
+        self.assertEqual([issue["title"] for issue in grouped["q1"]], ["a", "c"])
+
+    def test_blank_start_has_no_annotations(self):
+        self.graded_attempt({"q1": "答错的内容"}, [{"question_id": "q1", "title": "错了"}])
+        blank = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.assertIsNone(self.studio.inherited_annotations(blank["id"]))
+
+    def test_inherited_attempt_carries_the_source_annotations(self):
+        source = self.graded_attempt({"q1": "答错的内容"}, [
+            {"question_id": "q1", "title": "错了", "correction": "应该这样改"},
+        ])
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+
+        self.assertEqual(fresh["inherited_from"], source["id"])
+        prior = self.studio.inherited_annotations(fresh["id"])
+        self.assertIsNotNone(prior)
+        self.assertEqual(prior["attempt_id"], source["id"])
+        self.assertEqual(prior["attempt_no"], source["attempt_no"])
+        self.assertEqual(prior["score"], 70.0)
+        self.assertEqual([issue["title"] for issue in prior["by_question"]["q1"]], ["错了"])
+        self.assertFalse(prior["stale"])
+        self.assertIsNone(prior["seed_attempt_no"])
+
+    def test_first_attempt_has_no_annotations(self):
+        first = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertIsNone(first["inherited_from"])
+        self.assertIsNone(self.studio.inherited_annotations(first["id"]))
+
+    def test_ungraded_source_falls_back_to_latest_graded(self):
+        """底稿交了卷但没评分：退一步挂最近一份已评分的批注，并标明它是哪一次的。"""
+        older = self.graded_attempt({"q1": "更早的答案"}, [{"question_id": "q1", "title": "更早的错误"}])
+        ungraded = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.studio.submit_attempt(ungraded["id"], {"q1": "交了但没评分"})
+
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(fresh["answers"]["q1"], "交了但没评分")
+        self.assertEqual(fresh["inherited_from"], ungraded["id"])
+
+        prior = self.studio.inherited_annotations(fresh["id"])
+        self.assertIsNotNone(prior)
+        self.assertTrue(prior["stale"])
+        self.assertEqual(prior["attempt_id"], older["id"])
+        self.assertEqual(prior["attempt_no"], 1)
+        self.assertEqual(prior["seed_attempt_no"], 2)
+        self.assertEqual([issue["title"] for issue in prior["by_question"]["q1"]], ["更早的错误"])
+
+    def test_ungraded_source_without_any_grade_yields_nothing(self):
+        """整张卷一份评分都没有：没有可退让的来源，安静地不挂批注。"""
+        ungraded = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.studio.submit_attempt(ungraded["id"], {"q1": "交了但没评分"})
+
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(fresh["inherited_from"], ungraded["id"])
+        self.assertIsNone(self.studio.inherited_annotations(fresh["id"]))
+
+    def test_fallback_never_reaches_a_newer_attempt(self):
+        """退让只能往回看：比这次更晚的那份评分不能被当成「上一轮」。"""
+        ungraded = self.studio.start_attempt(self.paper["id"], inherit=False)
+        self.studio.submit_attempt(ungraded["id"], {"q1": "交了但没评分"})
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.assertEqual(fresh["inherited_from"], ungraded["id"])
+        self.assertIsNone(self.studio.inherited_annotations(fresh["id"]))
+
+        self.studio.submit_attempt(fresh["id"], {"q1": "交了但没评分"})
+        newer = self.graded_attempt({"q1": "更晚的答案"}, [{"question_id": "q1", "title": "更晚"}])
+        self.assertGreater(newer["attempt_no"], fresh["attempt_no"])
+        self.assertIsNone(self.studio.inherited_annotations(fresh["id"]))
+
+    def test_dangling_source_is_tolerated(self):
+        """底稿被删掉后 inherited_from 会悬空，没有可退让的来源时安静地当作没有。"""
+        source = self.graded_attempt({"q1": "答案"}, [{"question_id": "q1", "title": "错了"}])
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+        self.studio.discard_attempt(source["id"])
+        self.assertIsNone(self.studio.inherited_annotations(fresh["id"]))
+
+    def test_same_attempt_never_annotates_itself(self):
+        """正在作答的那条自己没有评分，不能把自己的空批注当成来源。"""
+        source = self.graded_attempt({"q1": "答案"}, [{"question_id": "q1", "title": "错了"}])
+        fresh = self.studio.start_attempt(self.paper["id"], inherit=True)
+        prior = self.studio.inherited_annotations(fresh["id"])
+        self.assertNotEqual(prior["attempt_id"], fresh["id"])
+        self.assertEqual(prior["attempt_id"], source["id"])
+
+
 class PaperStudioFormatTests(unittest.TestCase):
     def test_format_duration(self):
         self.assertEqual(format_duration(0), "00:00")
@@ -458,6 +579,21 @@ class PaperStudioUiSourceTests(unittest.TestCase):
         """取消作答里选交卷不能再问第二遍。"""
         source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
         self.assertIn("def _submit_now", source)
+
+    def test_prior_annotations_are_rendered_only_in_open_attempts(self):
+        """批注只作答中挂出来，且来源必须是服务层给的继承来源。"""
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("prior=self._prior_annotations(open_attempt)", source)
+        self.assertIn("def _prior_annotations(self, open_attempt", source)
+        self.assertIn("if open_attempt is None or self.attempt_id is None:", source)
+        self.assertIn("inherited_annotations", source)
+        self.assertIn("self._build_prior_banner(prior)", source)
+        self.assertIn("还没评分", source)
+
+    def test_annotations_are_attached_under_each_question(self):
+        source = (ROOT / "learningci" / "ui" / "paper_studio_page.py").read_text(encoding="utf-8")
+        self.assertIn("grouped.get(qid) or []", source)
+        self.assertIn("self._build_issue_card(issue_index, issue)", source)
 
 
 if __name__ == "__main__":

@@ -120,6 +120,25 @@ def answers_are_blank(answers: object) -> bool:
     return not any(_text(value) for value in answers.values())
 
 
+def group_issues_by_question(issues: object) -> dict[str, list[dict[str, object]]]:
+    """把一次评分的 issues 按题号分组，供作答中就地显示批注。
+
+    没有题号的批注（整卷性结论）挂不到任何一道题下面，直接丢弃 —— 作答中按题渲染，
+    留一个无处可放的分组只会让它悄悄消失。整卷结论仍由报告负责呈现。
+    """
+    grouped: dict[str, list[dict[str, object]]] = {}
+    if not isinstance(issues, list):
+        return grouped
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        question_id = _text(issue.get("question_id"))
+        if not question_id:
+            continue
+        grouped.setdefault(question_id, []).append(issue)
+    return grouped
+
+
 # --------------------------------------------------------------------------- #
 # 试卷结构
 # --------------------------------------------------------------------------- #
@@ -420,6 +439,9 @@ class PaperStudio:
 
         两种情况都遵守同一条：已存在未交卷的作答时直接复用它。否则一次误点就会把正在写的
         内容抹掉，计时也会被重置。
+
+        继承来的底稿是哪一条会记进 `inherited_from`：作答中要显示的批注必须跟着答案走，
+        这个字段是唯一的依据（详见 `inherited_annotations`）。
         """
         open_attempt = self.open_attempt(paper_id)
         if open_attempt is not None:
@@ -428,10 +450,12 @@ class PaperStudio:
         paper_id = int(paper_id)
 
         seed: dict[str, str] = {}
+        inherited_from: int | None = None
         if inherit:
             source = self.latest_answered_attempt(paper_id)
             if source is not None:
                 seed = {str(key): str(value) for key, value in dict(source["answers"]).items()}
+                inherited_from = int(source["id"])
 
         now = now_iso()
         with self.db.transaction() as conn:
@@ -440,9 +464,13 @@ class PaperStudio:
                 (paper_id,),
             ).fetchone()[0])
             cursor = conn.execute(
-                """INSERT INTO studio_attempts(paper_id,attempt_no,status,started_at,answers_json,created_at)
-                   VALUES(?,?,?,?,?,?)""",
-                (paper_id, next_no, ATTEMPT_OPEN, now, json.dumps(seed, ensure_ascii=False), now),
+                """INSERT INTO studio_attempts(
+                       paper_id,attempt_no,status,started_at,answers_json,inherited_from,created_at)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (
+                    paper_id, next_no, ATTEMPT_OPEN, now,
+                    json.dumps(seed, ensure_ascii=False), inherited_from, now,
+                ),
             )
             attempt_id = int(cursor.lastrowid)
 
@@ -475,6 +503,88 @@ class PaperStudio:
             if not answers_are_blank(attempt.get("answers")):
                 return attempt
         return None
+
+    def latest_graded_attempt(
+        self, paper_id: int, *, before_no: int | None = None
+    ) -> dict[str, object] | None:
+        """按作答次数倒序找最近一份**已评分**的作答。
+
+        `before_no` 把搜索限制在「比某一次更早」的范围内，避免把将来那次评的分当成
+        上一轮的批注。
+        """
+        sql = "SELECT * FROM studio_attempts WHERE paper_id=? AND status=?"
+        params: list[object] = [int(paper_id), ATTEMPT_GRADED]
+        if before_no is not None:
+            sql += " AND attempt_no<?"
+            params.append(int(before_no))
+        sql += " ORDER BY attempt_no DESC LIMIT 1"
+        row = self.db.conn.execute(sql, params).fetchone()
+        return self._attempt_view(row) if row is not None else None
+
+    def inherited_annotations(self, attempt_id: int) -> dict[str, object] | None:
+        """取「这次作答能用的上一轮批注」，供作答中就地显示。
+
+        来源优先取这条记录自己的 `inherited_from`：答案抄自哪一条，批注就用哪一条的评分，
+        不会把别人的批注挂到这份答案上。
+
+        底稿交了卷却还没评分时（很常见：改完就交，还没导出给 AI），退一步取该试卷最近一份
+        已评分的作答，并在返回值里用 `stale` / `seed_attempt_no` 标出来，界面据此写清
+        「批注来自第几次、哪一次还没评分」。这样一开始作答就有东西可看，而不是整卷空白。
+
+        底稿被删掉、或整张试卷一份评分都没有时返回 None：宁可没有批注，也不要凭空猜来源。
+        """
+        attempt = self.get_attempt(int(attempt_id))
+        if attempt is None:
+            return None
+        picked = self._annotation_source(attempt)
+        if picked is None:
+            return None
+        source, grade, stale = picked
+
+        seed_no: int | None = None
+        if stale:
+            seed = self.get_attempt(int(attempt["inherited_from"]))
+            seed_no = int(seed["attempt_no"]) if seed is not None else None
+
+        return {
+            "attempt_id": int(source["id"]),
+            "attempt_no": int(source["attempt_no"]),
+            "score": float(grade["score"]),
+            "max_score": float(grade["max_score"]),
+            "percent": float(grade["percent"]),
+            "summary": _text(grade.get("summary")),
+            "by_question": group_issues_by_question(grade.get("issues")),
+            "stale": stale,
+            "seed_attempt_no": seed_no,
+        }
+
+    def _annotation_source(
+        self, attempt: dict[str, object]
+    ) -> tuple[dict[str, object], dict[str, object], bool] | None:
+        """挑出给这次作答当批注来源的那条记录：(来源记录, 评分记录, 是否退让)。
+
+        没有 `inherited_from` 就是「重新作答」—— 空白起手，整卷不挂批注，因此直接返回
+        None，不做任何退让。退让只发生在「确实继承了答案、只是底稿还没评分」的情况。
+        """
+        seed_id = attempt.get("inherited_from")
+        if seed_id is None:
+            return None
+
+        seed = self.get_attempt(int(seed_id))
+        if seed is not None:
+            grade = self.get_grade(int(seed_id))
+            if grade is not None:
+                return seed, grade, False
+
+        fallback = self.latest_graded_attempt(
+            int(attempt["paper_id"]), before_no=int(attempt["attempt_no"])
+        )
+        if fallback is None:
+            return None
+        grade = self.get_grade(int(fallback["id"]))
+        if grade is None:
+            return None
+        return fallback, grade, True
 
     def get_attempt(self, attempt_id: int) -> dict[str, object] | None:
         row = self.db.conn.execute(

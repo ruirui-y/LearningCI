@@ -99,7 +99,8 @@ class PaperStudioPage(QWidget):
         title.setObjectName("PageTitle")
         sub = QLabel(
             "自己出题、限时闭卷作答、交 AI 评分，然后只看两件事：得了几分，错在哪里。"
-            "「开始作答」会接着上一次写过的答案写，「重新作答」才是空白。"
+            "「开始作答」会接着上一次写过的答案写，并把那一次的批注挂到各题下面；"
+            "「重新作答」才是空白、不带批注。"
             "这张试卷完全独立于节点的正式验收。"
         )
         sub.setObjectName("PageSub")
@@ -406,11 +407,30 @@ class PaperStudioPage(QWidget):
             readonly = False
 
         self._render_questions(
-            questions, answers if isinstance(answers, dict) else {}, readonly=readonly
+            questions,
+            answers if isinstance(answers, dict) else {},
+            readonly=readonly,
+            prior=self._prior_annotations(open_attempt),
         )
         self._render_grade()
         self._sync_buttons()
         self._tick()
+
+    def _prior_annotations(self, open_attempt: dict | None) -> dict[str, object] | None:
+        """作答进行中才显示历史批注。
+
+        来源由服务层按「这条作答的底稿是哪一条」给出，所以只有「开始作答」（继承上一次）
+        才有批注；「重新作答」是空白起手，没有来源，整卷不挂批注。
+        """
+        if open_attempt is None or self.attempt_id is None:
+            return None
+        prior = self.service.studio.inherited_annotations(self.attempt_id)
+        if prior is None:
+            return None
+        grouped = prior.get("by_question")
+        if not isinstance(grouped, dict) or not grouped:
+            return None
+        return prior
 
     def _import_paper_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -479,10 +499,26 @@ class PaperStudioPage(QWidget):
         self.answer_editors.clear()
 
     def _render_questions(
-        self, questions: list[dict], answers: dict[str, str], *, readonly: bool = False
+        self,
+        questions: list[dict],
+        answers: dict[str, str],
+        *,
+        readonly: bool = False,
+        prior: dict[str, object] | None = None,
     ) -> None:
+        """渲染题目与作答框。
+
+        `prior` 非空表示这次是「开始作答」—— 答案继承自上一次，于是把那一次留下的批注
+        按题挂回各自题目下方，边写边能看见上次错在哪。重新作答时这里是 None，整卷干净。
+        """
         self._loading_answers = True
         self._clear_questions()
+
+        grouped = prior.get("by_question") if prior else None
+        grouped = grouped if isinstance(grouped, dict) else {}
+        if grouped:
+            self.question_layout.addWidget(self._build_prior_banner(prior))
+
         for index, question in enumerate(questions, start=1):
             card = QFrame()
             card.setObjectName("QuestionCard")
@@ -522,11 +558,33 @@ class PaperStudioPage(QWidget):
                 editor.textChanged.connect(self._schedule_autosave)
             layout.addWidget(editor)
 
+            for issue_index, issue in enumerate(grouped.get(qid) or [], start=1):
+                if isinstance(issue, dict):
+                    layout.addWidget(self._build_issue_card(issue_index, issue))
+
             self.answer_editors[qid] = editor
             self.question_layout.addWidget(card)
 
         self.question_layout.addStretch(1)
         self._loading_answers = False
+
+    def _build_prior_banner(self, prior: dict[str, object]) -> QWidget:
+        parts = [
+            f"以下批注来自第 {int(prior['attempt_no'])} 次作答"
+            f"（{float(prior['score']):g} / {float(prior['max_score']):g}"
+            f"，{float(prior['percent']):g}%），挂在各自题目下方。"
+        ]
+        seed_no = prior.get("seed_attempt_no")
+        if prior.get("stale") and seed_no is not None:
+            parts.append(
+                f"第 {int(seed_no)} 次作答还没评分，所以先挂着上一次的批注；"
+                f"给第 {int(seed_no)} 次导入评分后，这里会换成它自己那一份。"
+            )
+        parts.append("「重新作答」不会带这些批注；交卷并导入新评分后会换成新的一份。")
+        label = QLabel("".join(parts))
+        label.setObjectName("Muted")
+        label.setWordWrap(True)
+        return label
 
     def _collect_answers(self) -> dict[str, str]:
         return {qid: editor.toPlainText().strip() for qid, editor in self.answer_editors.items()}
